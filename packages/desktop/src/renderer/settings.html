@@ -4,6 +4,10 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>FocusPal Settings</title>
+<script src="../common/appTheme.js"></script>
+<script src="../common/dateUtils.js"></script>
+<script src="../common/rendererUtils.js"></script>
+<script src="../common/taskUtils.js"></script>
 <link rel="stylesheet" href="./settings.css">
 </head>
 <body>
@@ -281,23 +285,78 @@
             <span class="knob"></span>
           </label>
         </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Word lookup</strong>
+            <span>Allow single-word selection lookup in the widget</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-word-lookup" checked/>
+            <span class="knob"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Appearance</div>
+        <div class="field">
+          <label>Color scheme</label>
+          <select id="theme-preset"></select>
+        </div>
+        <div class="theme-custom-grid hidden" id="theme-custom-grid">
+          <label class="theme-color-field">
+            <span>Background</span>
+            <input type="color" id="theme-bg"/>
+          </label>
+          <label class="theme-color-field">
+            <span>Panel</span>
+            <input type="color" id="theme-bg2"/>
+          </label>
+          <label class="theme-color-field">
+            <span>Panel Strong</span>
+            <input type="color" id="theme-bg3"/>
+          </label>
+          <label class="theme-color-field">
+            <span>Accent</span>
+            <input type="color" id="theme-accent"/>
+          </label>
+          <label class="theme-color-field">
+            <span>Accent Soft</span>
+            <input type="color" id="theme-accent2"/>
+          </label>
+          <label class="theme-color-field">
+            <span>Text</span>
+            <input type="color" id="theme-text"/>
+          </label>
+          <label class="theme-color-field">
+            <span>Muted Text</span>
+            <input type="color" id="theme-muted"/>
+          </label>
+        </div>
+        <div class="helper-copy">Choose a preset or switch to custom colors. The theme is applied across widget, settings, auth, and the end-of-day prompt.</div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Notifications</div>
+        <div class="field">
+          <label>Global notification sound</label>
+          <div class="inline-action-row">
+            <select id="notification-sound">
+              <option value="soft-chime">Soft Chime</option>
+              <option value="bell">Bell</option>
+              <option value="glass">Glass</option>
+              <option value="pulse">Pulse</option>
+              <option value="off">Off</option>
+            </select>
+            <button type="button" class="btn-inline" id="btn-preview-notification-sound">Preview</button>
+          </div>
+          <div class="helper-copy">Used for all in-widget notifications, including break reminders and task alerts.</div>
+        </div>
       </div>
 
       <div class="section">
         <div class="section-label">Data</div>
         <button class="btn-outline" onclick="clearAllTasks()">Clear all tasks</button>
-      </div>
-
-      <div class="section">
-        <div class="section-label">Word Lookup</div>
-        <div style="padding: 10px 0; color: var(--muted); font-size: 12px; line-height: 1.5;">
-          ℹ️ Word lookup is always active. Select any single word to see its definition and Tamil translation.
-        </div>
-        <div class="field">
-          <label>Cache size (10-100 words)</label>
-          <input type="number" id="word-cache-size" min="10" max="100" value="20" placeholder="20"/>
-        </div>
-        <button class="btn-outline" onclick="clearWordCache()">Clear word cache</button>
       </div>
     </div>
 
@@ -372,6 +431,7 @@
   </div>
 </div>
 
+<script src="./notificationSound.js"></script>
 <script src="./settings.js"></script>
 </body>
 </html>

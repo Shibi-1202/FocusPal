@@ -17,6 +17,10 @@ files:
   - "!**/._*"
   - "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}"
 
+extraResources:
+  - from: config/supabase.json
+    to: config/supabase.json
+
 linux:
   target:
     - target: AppImage
@@ -55,6 +59,7 @@ appImage:
   artifactName: ${productName}-${version}.${ext}
 
 deb:
+  packageName: focuspal
   artifactName: ${productName}-${version}.${ext}
   depends:
     - gconf2

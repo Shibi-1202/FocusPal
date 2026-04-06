@@ -1,230 +1,77 @@
-# FocusPal Monorepo
+# FocusPal
 
-A smart floating productivity companion for Desktop (Windows, Linux) and Mobile (Android).
+FocusPal is a floating desktop productivity companion for Windows and Linux.
+The current app uses Supabase directly for authentication and cloud-synced user
+state.
 
-## 🚀 Quick Start
+## Workspace
 
-**New to FocusPal?** Check out the [Quick Start Guide](./QUICKSTART.md) to get running in 5 minutes!
+```text
+packages/
+  desktop/   Electron desktop app
+scripts/     Local repo helper scripts
+```
+
+## Requirements
+
+- Node.js 18+
+- pnpm 8+
+- A Supabase project
+
+## Local setup
+
+1. Install dependencies:
 
 ```bash
-# Install and build
 pnpm install
+```
 
-# Verify setup
-pnpm test:monorepo
+2. Configure Supabase for the desktop app:
 
-# Start desktop app
+- Copy `packages/desktop/config/supabase.example.json`
+- Fill in `packages/desktop/config/supabase.json`
+- Apply `SUPABASE_SETUP.sql` to your Supabase project
+
+3. Start the desktop app:
+
+```bash
 pnpm start:desktop
 ```
 
-## 🏗️ Monorepo Structure
-
-```
-focuspal/
-├── packages/
-│   ├── shared/          # Shared code (API client, types, utils)
-│   ├── desktop/         # Electron app (Windows, Linux)
-│   ├── mobile/          # React Native app (Android) - Coming soon
-│   └── backend/         # Node.js API server
-├── scripts/             # Build and deployment scripts
-├── docs/                # Documentation
-└── package.json         # Root workspace configuration
-```
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Node.js 18+
-- pnpm 8+ (fast, efficient package manager)
-- PostgreSQL (for backend)
-
-### Installation
+## Useful commands
 
 ```bash
-# Install pnpm if you don't have it
-npm install -g pnpm
-
-# Install all dependencies
-pnpm install
-
-# This will also build the shared package
-```
-
-### Development
-
-```bash
-# Run desktop app
 pnpm dev:desktop
-
-# Run backend API (in another terminal)
-pnpm dev:backend
-
-# Build shared package (if you make changes)
-pnpm build:shared
-```
-
-### Building
-
-```bash
-# Build all packages
-pnpm build:all
-
-# Build specific package
 pnpm build:desktop
-pnpm build:backend
-
-# Build desktop installers
-cd packages/desktop
-pnpm build-linux    # .deb and AppImage
-pnpm build-win      # .exe installer and portable
+pnpm test:monorepo
 ```
 
-## 📦 Packages
+## Packaging
 
-### @focuspal/shared
-Shared code used across all platforms:
-- API client
-- TypeScript types
-- Utilities
-- Constants
+Build installers from the desktop package:
 
-### @focuspal/desktop
-Electron desktop application:
-- Windows (.exe)
-- Linux (.deb, AppImage)
-
-### @focuspal/backend
-Node.js API server:
-- Authentication
-- Cloud sync
-- Analytics
-- Word lookup cache
-
-### @focuspal/mobile (Coming Soon)
-React Native mobile app:
-- Android (.apk)
-
-## 🛠️ Development Workflow
-
-### Making Changes
-
-**Shared Code:**
-```bash
-cd packages/shared
-# Make changes
-pnpm build
-# Changes automatically available to desktop/mobile
-```
-
-**Desktop:**
 ```bash
 cd packages/desktop
-pnpm dev
+pnpm build-linux
+pnpm build-win
 ```
 
-**Backend:**
-```bash
-cd packages/backend
-pnpm dev
+Build output:
+
+```text
+packages/desktop/dist/
 ```
 
-### Adding Dependencies
+## Live setup
 
-**To shared package:**
-```bash
-pnpm add axios --filter @focuspal/shared
-```
+Use these files:
 
-**To desktop package:**
-```bash
-pnpm add electron-store --filter @focuspal/desktop
-```
+- `SUPABASE_SETUP.sql`
+- `SUPABASE_SETUP.txt`
+- `GO_LIVE_INSTRUCTIONS.txt`
 
-**To root (dev dependencies):**
-```bash
-pnpm add -D -w typescript
-```
+## Notes
 
-## 📚 Documentation
-
-- [Quick Start](./QUICKSTART.md) - Get started in 5 minutes
-- [Commands Reference](./COMMANDS.md) - All commands in one place
-- [Architecture](./ARCHITECTURE.md) - System design and deployment
-- [Product Requirements](./PRD.md) - Feature specifications
-- [Development Plan](./PLAN.md) - Implementation roadmap
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-pnpm test
-
-# Test specific package
-pnpm --filter @focuspal/shared test
-```
-
-## 🚢 Deployment
-
-### Quick Local Testing
-```bash
-# One-command setup and run
-./quick-start.sh
-```
-
-### Backend Deployment
-
-**Railway (Recommended):**
-```bash
-cd packages/backend
-railway login
-railway init
-railway add postgresql
-railway up
-```
-
-**Manual Setup:**
-See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for complete instructions.
-
-### Desktop Distribution
-```bash
-cd packages/desktop
-pnpm build-all
-# Installers in packages/desktop/dist/
-```
-
-### Testing
-```bash
-# Test backend API
-./test-api.sh
-
-# Test with cloud backend
-./test-api.sh https://your-api.railway.app
-```
-
-For detailed deployment instructions, see [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md).
-
-## 📝 Scripts
-
-- `pnpm dev:desktop` - Run desktop app in development
-- `pnpm dev:backend` - Run backend API in development
-- `pnpm build:all` - Build all packages
-- `pnpm test:monorepo` - Test monorepo setup
-- `pnpm clean` - Clean all build artifacts
-- `pnpm test` - Run all tests
-- `pnpm lint` - Lint all packages
-
-## 🤝 Contributing
-
-1. Make changes in appropriate package
-2. Build shared package if modified
-3. Test changes
-4. Commit with conventional commits
-
-## 📄 License
-
-MIT
-
-## 🔗 Links
-
-- [Backend API Documentation](./packages/backend/README.md)
-- [Shared Package Documentation](./packages/shared/README.md)
+- Windows and Linux desktop targets are configured
+- macOS packaging is not configured yet
+- The old custom backend has been removed from the active repo architecture

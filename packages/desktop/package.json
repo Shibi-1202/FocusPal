@@ -12,13 +12,13 @@
   "scripts": {
     "start": "electron . --no-sandbox",
     "dev": "electron . --dev --no-sandbox",
+    "test": "node --test src/common/dateUtils.test.js src/common/rendererUtils.test.js src/common/taskUtils.test.js",
     "build": "electron-builder",
     "build-linux": "electron-builder --linux",
     "build-win": "electron-builder --win",
     "build-all": "electron-builder --linux --win"
   },
   "dependencies": {
-    "@focuspal/shared": "1.0.0",
     "electron-store": "^8.1.0"
   },
   "devDependencies": {
@@ -40,8 +40,17 @@
     "win": {
       "target": ["nsis", "portable"]
     },
+    "deb": {
+      "packageName": "focuspal"
+    },
     "files": [
       "src/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "config/supabase.json",
+        "to": "config/supabase.json"
+      }
     ],
     "artifactName": "${productName}-${version}.${ext}"
   }

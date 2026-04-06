@@ -41,14 +41,6 @@ contextBridge.exposeInMainWorld('fp', {
   // Listen for data reload
   onReloadData: (cb) => ipcRenderer.on('reload-data', cb),
 
-  // API methods
-  api: {
-    getClient: () => ipcRenderer.invoke('api-get-client'),
-    setTokens: (accessToken, refreshToken) => ipcRenderer.invoke('api-set-tokens', accessToken, refreshToken),
-    clearTokens: () => ipcRenderer.invoke('api-clear-tokens'),
-    request: (method, url, data) => ipcRenderer.invoke('api-request', method, url, data)
-  },
-
   // Authentication methods
   auth: {
     login: (email, password) => ipcRenderer.invoke('auth-login', email, password),
@@ -63,6 +55,7 @@ contextBridge.exposeInMainWorld('fp', {
   onWordCleared: (cb) => ipcRenderer.on('word-cleared', cb),
   onLookupClosed: (cb) => ipcRenderer.on('lookup-closed', cb),
   onLookupRequested: (cb) => ipcRenderer.on('lookup-requested', (e, data) => cb(data)),
+  onLookupSettingUpdated: (cb) => ipcRenderer.on('lookup-setting-updated', (e, data) => cb(data)),
   openLookup: () => ipcRenderer.send('widget-lookup-open'),
   closeLookup: (state) => ipcRenderer.send('widget-lookup-close', state),
   resizeLookup: (size) => ipcRenderer.send('widget-lookup-resize', size),

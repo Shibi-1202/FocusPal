@@ -510,104 +510,89 @@
   }
   .btn-outline:hover { background: var(--bg3); color: var(--text); }
 
-  /* Audio settings */
-  .audio-setting {
-    margin-bottom: 16px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid var(--border);
-  }
-  .audio-setting:last-child { border-bottom: none; }
-  .audio-setting label {
-    display: block;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text);
-    margin-bottom: 8px;
-  }
-  .audio-controls {
-    display: flex;
+  .inline-action-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
     align-items: center;
-    gap: 8px;
   }
-  .btn-browse {
-    padding: 6px 14px;
+
+  .btn-inline {
+    padding: 8px 14px;
     background: var(--bg3);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     color: var(--text);
     font-family: 'Syne', sans-serif;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+    white-space: nowrap;
   }
-  .btn-browse:hover { background: var(--bg4); }
-  .audio-filename {
-    flex: 1;
+
+  .btn-inline:hover {
+    background: var(--bg4);
+    border-color: rgba(124,108,252,0.35);
+  }
+
+  .helper-copy {
+    margin-top: 8px;
     font-size: 11px;
     color: var(--muted);
-    font-family: 'DM Mono', monospace;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.5;
   }
-  .btn-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
-    border: none;
-    background: var(--bg3);
-    color: var(--muted);
-    cursor: pointer;
-    font-size: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s, color 0.15s;
-    flex-shrink: 0;
-  }
-  .btn-icon:hover { background: var(--bg4); color: var(--text); }
 
-  /* Volume control */
-  .volume-control {
+  .theme-custom-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .theme-custom-grid.hidden {
+    display: none;
+  }
+
+  .theme-color-field {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
-  }
-  .volume-control input[type="range"] {
-    flex: 1;
-    height: 6px;
+    margin-bottom: 0;
+    padding: 10px 12px;
     background: var(--bg3);
-    border-radius: 99px;
-    outline: none;
-    -webkit-appearance: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
   }
-  .volume-control input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 16px;
-    height: 16px;
-    background: var(--accent);
-    border-radius: 50%;
-    cursor: pointer;
-    transition: transform 0.15s;
-  }
-  .volume-control input[type="range"]::-webkit-slider-thumb:hover {
-    transform: scale(1.2);
-  }
-  .volume-control input[type="range"]::-moz-range-thumb {
-    width: 16px;
-    height: 16px;
-    background: var(--accent);
-    border-radius: 50%;
-    cursor: pointer;
-    border: none;
-  }
-  #volume-display {
-    font-family: 'DM Mono', monospace;
+
+  .theme-color-field span {
     font-size: 12px;
+    font-weight: 600;
     color: var(--text);
-    min-width: 40px;
-    text-align: right;
+  }
+
+  .theme-color-field input[type="color"] {
+    width: 34px;
+    height: 24px;
+    border: none;
+    padding: 0;
+    background: transparent;
+    cursor: pointer;
+  }
+
+  .theme-color-field input[type="color"]::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+
+  .theme-color-field input[type="color"]::-webkit-color-swatch {
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
+  }
+
+  .theme-color-field input[type="color"]::-moz-color-swatch {
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 999px;
   }
 
   /* Bottom save bar */

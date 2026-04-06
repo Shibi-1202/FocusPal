@@ -38,12 +38,6 @@ packages/mobile/android/app/build/
 packages/mobile/ios/build/
 packages/mobile/.expo/
 
-# Backend
-packages/backend/dist/
-
-# Shared
-packages/shared/dist/
-
 # Test coverage
 coverage/
 *.lcov
@@ -51,3 +45,8 @@ coverage/
 # Temporary files
 *.tmp
 .cache/
+
+# Docs
+*.md
+**/*.md
+!/README.md

@@ -1,6 +1,7 @@
 // State
     let isLoginMode = true;
     let isLoading = false;
+    const validateEmail = window.FocusPalRendererUtils.validateEmail;
 
     // Elements
     const form = document.getElementById('authForm');
@@ -22,6 +23,7 @@
 
     // Auto-focus email on load
     window.addEventListener('DOMContentLoaded', () => {
+      window.FocusPalTheme?.loadAndApply?.();
       emailInput.focus();
     });
 
@@ -147,6 +149,11 @@
         }
         
         if (result.success) {
+          if (result.pendingConfirmation) {
+            showSuccess(result.message || 'Check your email to confirm your account before signing in.');
+            return;
+          }
+
           // Show success message
           const userName = result.user?.displayName || result.user?.name || 'there';
           showSuccess(isLoginMode ? `Welcome back, ${userName}!` : `Welcome to FocusPal, ${userName}!`);
@@ -166,10 +173,6 @@
         setLoading(false);
       }
     });
-
-    function validateEmail(email) {
-      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    }
 
     function setLoading(loading) {
       isLoading = loading;
@@ -220,7 +223,7 @@
       try {
         const result = await window.fp.auth.requestPasswordReset(email);
         if (result.success) {
-          showSuccess(result.message || 'If the account exists, a reset link has been sent.');
+          showSuccess(result.message || 'If the account exists, a reset link has been sent. Open the email link in your browser to choose a new password.');
         } else {
           showError(result.error || 'Unable to request password reset.');
         }

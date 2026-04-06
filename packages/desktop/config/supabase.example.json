@@ -1,0 +1,5 @@
+{
+  "url": "https://your-project.supabase.co",
+  "anonKey": "your-anon-key",
+  "passwordResetRedirectURL": "https://focuspal.com/reset-password"
+}

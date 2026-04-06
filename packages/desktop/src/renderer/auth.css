@@ -193,7 +193,7 @@
     }
 
     .submit-btn:hover:not(:disabled) {
-      background-color: #e05a2f;
+      background-color: var(--accent2);
       transform: translateY(-1px);
       box-shadow: var(--shadow-md);
     }
@@ -301,7 +301,7 @@
     }
 
     .mode-toggle a:hover {
-      color: #e05a2f;
+      color: var(--accent2);
     }
 
     .name-field {

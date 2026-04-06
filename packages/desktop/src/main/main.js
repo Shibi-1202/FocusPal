@@ -1,18 +1,12 @@
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, globalShortcut, dialog } = require('electron');
 const path = require('path');
-const os = require('os');
-const { randomUUID } = require('crypto');
 const Store = require('electron-store');
-const { APIClient } = require('@focuspal/shared');
+const FocusPalTheme = require('../common/appTheme');
+const { shiftDateKey } = require('../common/dateUtils');
+const { SupabaseClient, SupabaseRequestError } = require('./supabaseClient');
 
 const store = new Store();
-
-// Initialize API client
-const apiClient = new APIClient({
-  baseURL: process.env.NODE_ENV === 'production'
-    ? 'https://api.focuspal.com'
-    : 'http://localhost:3000'
-});
+const supabaseClient = new SupabaseClient();
 
 let widgetWindow = null;
 let settingsWindow = null;
@@ -20,6 +14,7 @@ let authWindow = null;
 let tray = null;
 let clipboardMonitorInterval = null;
 let lastClipboardText = '';
+let isQuitting = false;
 let currentCollapsedMode = 'dot';
 let currentWidgetState = 'collapsed';
 let widgetAnchorCenter = null;
@@ -28,18 +23,40 @@ let pendingLookupWord = '';
 let lookupOpenTimeout = null;
 let lookupAnchorCenter = null;
 let lookupCollapsedState = null;
+let cloudStateCache = null;
+let cloudStateUserId = null;
 const USER_SCOPED_KEYS = new Set([
   'tasks',
   'taskHistory',
-  'wordCache',
-  'lastCloudTaskSync'
+  'lastCloudTaskSync',
+  'breakInterval',
+  'wordLookupEnabled',
+  'notificationSound',
+  'appTheme',
+  'breakWater',
+  'breakStretch',
+  'breakEyes',
+  'breakWaterMessage',
+  'breakStretchMessage',
+  'breakEyesMessage',
+  'eodPrompt',
+  'taskConfirmations',
+  'pomodoroSettings'
 ]);
+const CLOUD_SYNC_KEYS = new Set(
+  Array.from(USER_SCOPED_KEYS).filter((key) => key !== 'lastCloudTaskSync')
+);
 
 // ── Window sizes ──────────────────────────────────────────────────────────────
 const WIDGET_DOT = { width: 48, height: 48 };
 const WIDGET_PILL = { width: 168, height: 48 };
 const WIDGET_EXPANDED  = { width: 400, height: 260 };
-const WIDGET_LOOKUP    = { width: 480, height: 220 };
+const WIDGET_LOOKUP = { width: 480, height: 220 };
+const RENDERER_WEB_PREFERENCES = {
+  nodeIntegration: false,
+  contextIsolation: true,
+  preload: path.join(__dirname, 'preload.js')
+};
 
 function getBottomRightPos(w, h) {
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
@@ -55,6 +72,17 @@ function normalizePosition(position) {
     x: Math.round(Number(position?.x) || 0),
     y: Math.round(Number(position?.y) || 0)
   };
+}
+
+function createRendererWindow(options) {
+  const { webPreferences = {}, ...rest } = options;
+  return new BrowserWindow({
+    ...rest,
+    webPreferences: {
+      ...RENDERER_WEB_PREFERENCES,
+      ...webPreferences
+    }
+  });
 }
 
 function clamp(value, min, max) {
@@ -162,6 +190,50 @@ function setWidgetBounds(size, position = null) {
   });
 }
 
+function getWindowFromSender(event) {
+  return event?.sender ? BrowserWindow.fromWebContents(event.sender) : null;
+}
+
+function isWordLookupEnabled() {
+  return getLocalStoreValue('wordLookupEnabled') !== false;
+}
+
+function broadcastLookupSetting(enabled = isWordLookupEnabled()) {
+  const payload = { enabled };
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.webContents.send('lookup-setting-updated', payload);
+  }
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.webContents.send('lookup-setting-updated', payload);
+  }
+}
+
+function normalizeSupabaseUser(user) {
+  if (!user) return null;
+
+  return {
+    id: user.id,
+    email: user.email || '',
+    displayName: user.user_metadata?.display_name || user.user_metadata?.name || '',
+    createdAt: user.created_at || null
+  };
+}
+
+function clearCloudStateCache() {
+  cloudStateCache = null;
+  cloudStateUserId = null;
+}
+
+function ensurePrimaryUserId(userId) {
+  if (!userId) {
+    return;
+  }
+
+  if (!store.get('app.primaryUserId')) {
+    store.set('app.primaryUserId', userId);
+  }
+}
+
 function getCurrentUserId() {
   return store.get('auth.user.id') || null;
 }
@@ -170,7 +242,7 @@ function getUserScopedStoreKey(userId, key) {
   return `users.${userId}.${key}`;
 }
 
-function getStoreValue(key) {
+function getLocalStoreValue(key) {
   const userId = getCurrentUserId();
 
   if (!USER_SCOPED_KEYS.has(key) || !userId) {
@@ -182,6 +254,14 @@ function getStoreValue(key) {
     return store.get(scopedKey);
   }
 
+  if (
+    cloudStateUserId === userId &&
+    cloudStateCache &&
+    !Object.prototype.hasOwnProperty.call(cloudStateCache, key)
+  ) {
+    return undefined;
+  }
+
   const primaryUserId = store.get('app.primaryUserId');
   if (primaryUserId && primaryUserId === userId && store.has(key)) {
     return store.get(key);
@@ -190,7 +270,7 @@ function getStoreValue(key) {
   return undefined;
 }
 
-function setStoreValue(key, value) {
+function setLocalStoreValue(key, value) {
   const userId = getCurrentUserId();
 
   if (!USER_SCOPED_KEYS.has(key) || !userId) {
@@ -202,88 +282,145 @@ function setStoreValue(key, value) {
   store.set(scopedKey, value);
 }
 
-function showLookupForPendingWord() {
-  if (!pendingLookupWord || !widgetWindow || widgetWindow.isDestroyed()) {
+async function ensureCloudStateLoaded(force = false) {
+  const userId = getCurrentUserId();
+  const { accessToken } = supabaseClient.getSession();
+
+  if (!userId || !accessToken || !supabaseClient.isConfigured()) {
+    return {};
+  }
+
+  if (!force && cloudStateCache && cloudStateUserId === userId) {
+    return cloudStateCache;
+  }
+
+  const row = await supabaseClient.getAppState(userId);
+  const nextState = row?.data && typeof row.data === 'object' ? row.data : {};
+
+  cloudStateCache = { ...nextState };
+  cloudStateUserId = userId;
+
+  Object.entries(nextState).forEach(([key, value]) => {
+    if (CLOUD_SYNC_KEYS.has(key)) {
+      setLocalStoreValue(key, value);
+    }
+  });
+
+  return cloudStateCache;
+}
+
+async function getStoreValue(key) {
+  const localValue = getLocalStoreValue(key);
+  if (localValue !== undefined) {
+    return localValue;
+  }
+
+  if (!CLOUD_SYNC_KEYS.has(key)) {
+    return undefined;
+  }
+
+  const cloudState = await ensureCloudStateLoaded();
+  if (Object.prototype.hasOwnProperty.call(cloudState, key)) {
+    const value = cloudState[key];
+    setLocalStoreValue(key, value);
+    return value;
+  }
+
+  return undefined;
+}
+
+async function setStoreValue(key, value) {
+  setLocalStoreValue(key, value);
+
+  if (!CLOUD_SYNC_KEYS.has(key)) {
     return;
   }
+
+  const userId = getCurrentUserId();
+  const { accessToken } = supabaseClient.getSession();
+
+  if (!userId || !accessToken || !supabaseClient.isConfigured()) {
+    return;
+  }
+
+  const currentState = await ensureCloudStateLoaded();
+  const nextState = {
+    ...currentState,
+    [key]: value
+  };
+
+  cloudStateCache = nextState;
+  cloudStateUserId = userId;
+  await supabaseClient.upsertAppState(userId, nextState);
+}
+
+function showLookupForPendingWord() {
+  if (!isWordLookupEnabled() || !pendingLookupWord || !widgetWindow || widgetWindow.isDestroyed()) {
+    return;
+  }
+
+  const word = pendingLookupWord;
 
   if (typeof widgetWindow.showInactive === 'function') {
     widgetWindow.showInactive();
   } else {
     widgetWindow.show();
   }
-  setWidgetBounds(WIDGET_LOOKUP);
-  widgetWindow.webContents.send('lookup-requested', { word: pendingLookupWord });
-}
 
-function launchMainApp() {
-  if (!widgetWindow || widgetWindow.isDestroyed()) {
-    createWidgetWindow();
-  }
-
-  if (!tray) {
-    createTray();
-  }
-
-  startClipboardMonitor();
-  syncCurrentDevicePosition(store.get('widgetPosition'));
-}
-
-function getDeviceRegistration() {
-  let deviceId = store.get('device.id');
-  if (!deviceId) {
-    deviceId = randomUUID();
-    store.set('device.id', deviceId);
-  }
-
-  return {
-    deviceId,
-    deviceName: `${os.hostname()} (${process.platform})`,
-    platform: process.platform,
-    widgetPosition: store.get('widgetPosition') || null
+  const sendLookupRequest = () => {
+    if (!widgetWindow || widgetWindow.isDestroyed()) {
+      return;
+    }
+    widgetWindow.webContents.send('lookup-requested', { word });
   };
-}
 
-async function syncCurrentDevicePosition(position) {
-  if (!apiClient.getAccessToken()) {
-    return;
-  }
-
-  try {
-    const payload = getDeviceRegistration();
-    payload.widgetPosition = position || payload.widgetPosition;
-    await apiClient.post('/api/user/device', payload);
-  } catch (err) {
-    console.error('Device sync error:', err.message);
+  if (widgetWindow.webContents.isLoading()) {
+    widgetWindow.webContents.once('did-finish-load', sendLookupRequest);
+  } else {
+    sendLookupRequest();
   }
 }
 
-// ── Clipboard monitoring for word lookup ──────────────────────────────────────
 function startClipboardMonitor() {
   const { clipboard } = require('electron');
   stopClipboardMonitor();
 
   clipboardMonitorInterval = setInterval(() => {
     try {
-      // Try to read from selection (Linux primary clipboard)
+      if (!isWordLookupEnabled()) {
+        if (lastClipboardText || pendingLookupWord || lookupOpenTimeout) {
+          lastClipboardText = '';
+          pendingLookupWord = '';
+
+          if (lookupOpenTimeout) {
+            clearTimeout(lookupOpenTimeout);
+            lookupOpenTimeout = null;
+          }
+
+          if (widgetWindow && !widgetWindow.isDestroyed()) {
+            widgetWindow.webContents.send('word-cleared');
+          }
+        }
+        return;
+      }
+
       let text = '';
+
       try {
         text = clipboard.readText('selection');
-      } catch (e) {
-        // Fallback to standard clipboard on Windows/Mac
+      } catch (err) {
         text = clipboard.readText();
       }
-      
-      // Check if text is valid for lookup
-      if (text && text !== lastClipboardText) {
-        const trimmed = text.trim();
+
+      const trimmed = (text || '').trim();
+
+      if (trimmed && trimmed !== lastClipboardText) {
         const wordCount = trimmed.split(/\s+/).length;
-        
-        // Only trigger for single words between 3 and 39 characters
+
         if (trimmed.length >= 3 && trimmed.length < 40 && wordCount === 1) {
           lastClipboardText = trimmed;
           pendingLookupWord = trimmed;
-          
+
           if (lookupOpenTimeout) {
             clearTimeout(lookupOpenTimeout);
           }
@@ -298,22 +435,23 @@ function startClipboardMonitor() {
             lookupOpenTimeout = null;
           }
         }
-      } else if ((!text || !text.trim()) && lastClipboardText) {
-        // Text cleared
+      } else if (!trimmed && lastClipboardText) {
         lastClipboardText = '';
         pendingLookupWord = '';
+
         if (lookupOpenTimeout) {
           clearTimeout(lookupOpenTimeout);
           lookupOpenTimeout = null;
         }
+
         if (widgetWindow && !widgetWindow.isDestroyed()) {
           widgetWindow.webContents.send('word-cleared');
         }
       }
     } catch (err) {
-      // Silently ignore clipboard errors
+      // Ignore clipboard access errors.
     }
-  }, 500); // Check every 500ms
+  }, 500);
 }
 
 function stopClipboardMonitor() {
@@ -321,10 +459,26 @@ function stopClipboardMonitor() {
     clearInterval(clipboardMonitorInterval);
     clipboardMonitorInterval = null;
   }
+
   if (lookupOpenTimeout) {
     clearTimeout(lookupOpenTimeout);
     lookupOpenTimeout = null;
   }
+
+  lastClipboardText = '';
+  pendingLookupWord = '';
+}
+
+function launchMainApp() {
+  if (!widgetWindow || widgetWindow.isDestroyed()) {
+    createWidgetWindow();
+  }
+
+  if (!tray) {
+    createTray();
+  }
+
+  startClipboardMonitor();
 }
 
 
@@ -336,38 +490,26 @@ function createAuthWindow() {
     return;
   }
 
-  authWindow = new BrowserWindow({
+  authWindow = createRendererWindow({
     width: 450,
     height: 650,
     center: true,
     frame: false,
     resizable: false,
     alwaysOnTop: false,
-    skipTaskbar: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
+    skipTaskbar: false
   });
 
   authWindow.loadFile(path.join(__dirname, '../renderer/auth.html'));
 
-  // Prevent closing without authentication
-  authWindow.on('close', (e) => {
-    const hasToken = store.get('auth.accessToken');
-    if (!hasToken) {
-      e.preventDefault();
-      dialog.showMessageBox(authWindow, {
-        type: 'warning',
-        title: 'Authentication Required',
-        message: 'You must sign in to use FocusPal',
-        buttons: ['OK']
-      });
+  authWindow.on('closed', () => {
+    authWindow = null;
+
+    const hasSession = Boolean(store.get('auth.accessToken') && store.get('auth.refreshToken'));
+    if (!isQuitting && !hasSession && !tray && !widgetWindow && !settingsWindow) {
+      app.quit();
     }
   });
-
-  authWindow.on('closed', () => { authWindow = null; });
 }
 
 // ── Create widget window ──────────────────────────────────────────────────────
@@ -376,7 +518,7 @@ function createWidgetWindow() {
   const initialPos = getCollapsedAnchorPosition('dot');
   currentWidgetState = 'collapsed';
 
-  widgetWindow = new BrowserWindow({
+  widgetWindow = createRendererWindow({
     width: WIDGET_DOT.width,
     height: WIDGET_DOT.height,
     x: initialPos.x,
@@ -388,12 +530,7 @@ function createWidgetWindow() {
     resizable: false,
     movable: true,
     hasShadow: false,
-    type: 'toolbar',          // Stays above most windows on Linux
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
+    type: 'toolbar'          // Stays above most windows on Linux
   });
 
   widgetWindow.setAlwaysOnTop(true, 'screen-saver'); // Highest level
@@ -417,19 +554,14 @@ function createSettingsWindow() {
     settingsWindow.focus();
     return;
   }
-  settingsWindow = new BrowserWindow({
+  settingsWindow = createRendererWindow({
     width: 520,
     height: 640,
     frame: false,
     transparent: false,
     resizable: false,
     center: true,
-    skipTaskbar: false,
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      preload: path.join(__dirname, 'preload.js')
-    }
+    skipTaskbar: false
   });
   settingsWindow.loadFile(path.join(__dirname, '../renderer/settings.html'));
   settingsWindow.on('closed', () => { settingsWindow = null; });
@@ -455,7 +587,6 @@ function selectSettingsTab(tabPayload) {
 // ── Tray ──────────────────────────────────────────────────────────────────────
 function createTray() {
   // Create a simple 16x16 purple dot icon
-  const canvas = require('electron').nativeImage.createEmpty();
   const icon = nativeImage.createFromDataURL(
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFJSURBVDiNpdM9S8NAGMDx/5Nc0kKhUBwEwUVwcRMcXPwAfgAHBxEHQXDRr+Dg4CI4iYOTk4uDgyAIQnFwEAQHBUGQYqFJm+Z6DqZN2qTW5x7u7vfcc/cS/lMopQghEEKglEIpBSEESimUUiilIIRAKYVSCqUUSikIIVBKQQiBUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKX4AXYVXKzFfX1yAAAAAElFTkSuQmCC'
   );
@@ -473,21 +604,58 @@ function createTray() {
 }
 
 function storeAuthSession(response) {
-  store.set('auth.accessToken', response.accessToken);
-  store.set('auth.refreshToken', response.refreshToken);
-  store.set('auth.user', response.user);
-  apiClient.setTokens(response.accessToken, response.refreshToken);
+  const accessToken = response?.access_token || response?.accessToken || null;
+  const refreshToken = response?.refresh_token || response?.refreshToken || null;
+  const user = normalizeSupabaseUser(response?.user);
+
+  store.set('auth.accessToken', accessToken);
+  store.set('auth.refreshToken', refreshToken);
+  store.set('auth.user', user);
+  supabaseClient.setSession(accessToken, refreshToken);
+  clearCloudStateCache();
+
+  ensurePrimaryUserId(user?.id);
 }
 
 function clearAuthSession() {
   store.delete('auth.accessToken');
   store.delete('auth.refreshToken');
   store.delete('auth.user');
-  apiClient.clearTokens();
+  supabaseClient.clearSession();
+  clearCloudStateCache();
 }
 
-function completeAuthSuccess(response) {
+function getAuthErrorMessage(error, fallback) {
+  if (error instanceof SupabaseRequestError) {
+    return error.message || fallback;
+  }
+
+  return fallback;
+}
+
+function getSessionPayload(response) {
+  if (!response) return null;
+  if (response.session?.access_token) {
+    return {
+      ...response.session,
+      user: response.user || response.session.user
+    };
+  }
+
+  if (response.access_token) {
+    return response;
+  }
+
+  return null;
+}
+
+async function completeAuthSuccess(response) {
   storeAuthSession(response);
+  try {
+    await ensureCloudStateLoaded(true);
+  } catch (err) {
+    console.error('Cloud state hydrate error:', err);
+  }
 
   setTimeout(() => {
     if (authWindow && !authWindow.isDestroyed()) {
@@ -521,7 +689,7 @@ ipcMain.on('widget-set-collapsed-state', (event, mode) => {
   currentCollapsedMode = mode === 'pill' ? 'pill' : 'dot';
   if (!widgetWindow || widgetWindow.isDestroyed()) return;
 
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  const senderWindow = getWindowFromSender(event);
   if (senderWindow !== widgetWindow) return;
 
   if (currentWidgetState === 'collapsed') {
@@ -533,64 +701,82 @@ ipcMain.on('widget-set-collapsed-state', (event, mode) => {
   }
 });
 
-// Widget lookup mode → resize to lookup card
-ipcMain.on('widget-lookup-open', () => {
-  if (!widgetWindow) return;
-  captureWidgetAnchorFromWindow();
-  lookupAnchorCenter = getWidgetAnchorCenter();
-  lookupCollapsedState = {
-    position: getCollapsedAnchorPosition(currentCollapsedMode),
-    mode: currentCollapsedMode
-  };
+ipcMain.on('widget-lookup-open', (event) => {
+  if (!widgetWindow || widgetWindow.isDestroyed()) return;
+
+  const senderWindow = getWindowFromSender(event);
+  if (senderWindow !== widgetWindow) return;
+
+  if (currentWidgetState !== 'lookup') {
+    if (currentWidgetState === 'collapsed') {
+      lookupCollapsedState = {
+        position: getCollapsedAnchorPosition(currentCollapsedMode),
+        mode: currentCollapsedMode
+      };
+    } else {
+      captureWidgetAnchorFromWindow();
+      lookupCollapsedState = null;
+    }
+
+    lookupAnchorCenter = getWidgetAnchorCenter();
+  }
+
   currentWidgetState = 'lookup';
-  setWidgetBounds(WIDGET_LOOKUP, getPositionFromCenter(getWidgetAnchorCenter(), WIDGET_LOOKUP));
+  const anchorCenter = lookupAnchorCenter || getWidgetAnchorCenter();
+  setWidgetBounds(WIDGET_LOOKUP, getPositionFromCenter(anchorCenter, WIDGET_LOOKUP));
 });
 
 ipcMain.on('widget-lookup-resize', (event, size) => {
   if (!widgetWindow || widgetWindow.isDestroyed()) return;
 
-  const senderWindow = BrowserWindow.fromWebContents(event.sender);
+  const senderWindow = getWindowFromSender(event);
   if (senderWindow !== widgetWindow) return;
 
   const width = Math.max(WIDGET_LOOKUP.width, Math.min(Number(size?.width) || WIDGET_LOOKUP.width, 640));
   const height = Math.max(WIDGET_LOOKUP.height, Math.min(Number(size?.height) || WIDGET_LOOKUP.height, 420));
-  setWidgetBounds({ width, height });
+  const nextSize = { width, height };
+  const anchorCenter = lookupAnchorCenter || getWidgetAnchorCenter();
+  setWidgetBounds(nextSize, getPositionFromCenter(anchorCenter, nextSize));
 });
 
 ipcMain.on('widget-lookup-close', (event, state) => {
-  if (!widgetWindow) return;
+  if (!widgetWindow || widgetWindow.isDestroyed()) return;
+
+  const senderWindow = getWindowFromSender(event);
+  if (senderWindow !== widgetWindow) return;
+
+  const anchorCenter = lookupAnchorCenter || getWidgetAnchorCenter();
+
   if (state === 'expanded') {
     currentWidgetState = 'expanded';
-    setWidgetBounds(WIDGET_EXPANDED, getPositionFromCenter(getWidgetAnchorCenter(), WIDGET_EXPANDED));
+    setWidgetAnchorCenter(anchorCenter);
+    setWidgetBounds(WIDGET_EXPANDED, getPositionFromCenter(anchorCenter, WIDGET_EXPANDED));
   } else {
     currentWidgetState = 'collapsed';
+
     if (lookupCollapsedState) {
       currentCollapsedMode = lookupCollapsedState.mode;
       const snapped = applySnappedCollapsedPosition(lookupCollapsedState.position, currentCollapsedMode);
-      lookupCollapsedState = null;
-      lookupAnchorCenter = null;
       setWidgetBounds(getCollapsedBounds(currentCollapsedMode), snapped);
       persistCollapsedPosition(currentCollapsedMode);
-      widgetWindow.webContents.send('lookup-closed');
-      return;
-    } else if (lookupAnchorCenter) {
-      setWidgetAnchorCenter(lookupAnchorCenter);
+    } else {
+      setWidgetAnchorCenter(anchorCenter);
+      const nextPosition = getCollapsedAnchorPosition(currentCollapsedMode);
+      const snapped = applySnappedCollapsedPosition(nextPosition, currentCollapsedMode);
+      setWidgetBounds(getCollapsedBounds(currentCollapsedMode), snapped);
+      persistCollapsedPosition(currentCollapsedMode);
     }
-    lookupAnchorCenter = null;
-    const nextPosition = getCollapsedAnchorPosition(currentCollapsedMode);
-    const snapped = applySnappedCollapsedPosition(nextPosition, currentCollapsedMode);
-    setWidgetBounds(getCollapsedBounds(currentCollapsedMode), snapped);
-    persistCollapsedPosition(currentCollapsedMode);
   }
-  // Return to previous state - let renderer decide
+
+  lookupAnchorCenter = null;
+  lookupCollapsedState = null;
   widgetWindow.webContents.send('lookup-closed');
 });
 
 // Save window position after drag
 ipcMain.on('save-position', (e, pos) => {
   setWidgetAnchorCenter(getCenterFromPosition(pos, getCollapsedBounds(currentCollapsedMode)));
-  const nextPosition = persistCollapsedPosition(currentCollapsedMode);
-  syncCurrentDevicePosition(nextPosition);
+  persistCollapsedPosition(currentCollapsedMode);
 });
 
 // Get position for renderer drag
@@ -613,18 +799,21 @@ ipcMain.handle('set-position', (e, x, y) => {
 });
 
 // Store CRUD
-ipcMain.handle('store-get', (e, key) => {
+ipcMain.handle('store-get', async (e, key) => {
   try {
-    return getStoreValue(key);
+    return await getStoreValue(key);
   } catch (err) {
     console.error('store-get error:', err);
     return null;
   }
 });
 
-ipcMain.handle('store-set', (e, key, value) => {
+ipcMain.handle('store-set', async (e, key, value) => {
   try {
-    setStoreValue(key, value);
+    await setStoreValue(key, value);
+    if (key === 'wordLookupEnabled') {
+      broadcastLookupSetting(value !== false);
+    }
     return true;
   } catch (err) {
     console.error('store-set error:', err);
@@ -712,36 +901,31 @@ ipcMain.handle('get-auto-start', () => {
 
 // Window controls
 ipcMain.on('minimize-window', (event) => {
-  const window = BrowserWindow.fromWebContents(event.sender);
+  const window = getWindowFromSender(event);
   if (window) window.minimize();
 });
 
 ipcMain.on('close-window', (event) => {
-  const window = BrowserWindow.fromWebContents(event.sender);
+  const window = getWindowFromSender(event);
   if (window) window.close();
 });
 
 // Quit app with EOD prompt
 ipcMain.on('quit-app', async () => {
-  const eodPrompt = store.get('eodPrompt', true);
+  const eodPrompt = getLocalStoreValue('eodPrompt');
   
-  if (eodPrompt) {
-    const { dialog, BrowserWindow } = require('electron');
+  if (eodPrompt !== false) {
+    const theme = FocusPalTheme.resolveTheme(getLocalStoreValue('appTheme'));
     
     // Create custom EOD dialog
-    const eodWindow = new BrowserWindow({
+    const eodWindow = createRendererWindow({
       width: 400,
       height: 250,
       center: true,
       frame: false,
       resizable: false,
       alwaysOnTop: true,
-      modal: true,
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        preload: path.join(__dirname, 'preload.js')
-      }
+      modal: true
     });
     
     const html = `
@@ -752,27 +936,27 @@ ipcMain.on('quit-app', async () => {
           * { margin: 0; padding: 0; box-sizing: border-box; }
           body {
             font-family: 'Segoe UI', system-ui, sans-serif;
-            background: #1a1a1f;
-            color: #f1f0ff;
+            background: ${theme.bg2};
+            color: ${theme.text};
             padding: 24px;
           }
           h2 { 
             font-size: 20px; 
             margin-bottom: 8px; 
-            color: #a78bfa;
+            color: ${theme.accent2};
             display: flex;
             align-items: center;
             gap: 8px;
           }
           .subtitle {
             font-size: 13px;
-            color: #8b8a9e;
+            color: ${theme.muted};
             margin-bottom: 28px;
           }
           .question {
             font-size: 15px;
             font-weight: 600;
-            color: #f1f0ff;
+            color: ${theme.text};
             margin-bottom: 16px;
             text-align: center;
           }
@@ -794,19 +978,19 @@ ipcMain.on('quit-app', async () => {
           }
           .buttons button:hover { opacity: 0.85; }
           .btn-primary {
-            background: #7c6cfc;
+            background: ${theme.accent};
             color: #fff;
           }
           .btn-secondary {
-            background: #2e2e35;
-            color: #8b8a9e;
+            background: ${theme.bg4};
+            color: ${theme.muted};
           }
           .checkbox-row {
             display: flex;
             align-items: center;
             gap: 8px;
             font-size: 12px;
-            color: #8b8a9e;
+            color: ${theme.muted};
             cursor: pointer;
           }
           .checkbox-row input {
@@ -860,11 +1044,9 @@ ipcMain.on('quit-app', async () => {
         }
         
         if (result.action === 'plan') {
-          const tomorrow = new Date();
-          tomorrow.setDate(tomorrow.getDate() + 1);
           const planningPayload = {
             tab: 'tasks',
-            planningDate: tomorrow.toISOString().split('T')[0],
+            planningDate: shiftDateKey(1),
             quitAfterSave: true
           };
 
@@ -896,40 +1078,49 @@ ipcMain.on('quit-app', async () => {
 // Authentication handlers
 ipcMain.handle('auth-login', async (e, email, password) => {
   try {
-    const response = await apiClient.post('/api/auth/login', { email, password });
-    completeAuthSuccess(response);
-    return { success: true, user: response.user };
+    const response = await supabaseClient.signInWithPassword({ email, password });
+    const session = getSessionPayload(response);
+    await completeAuthSuccess(session);
+    return { success: true, user: normalizeSupabaseUser(session.user) };
   } catch (err) {
     console.error('Login error:', err);
     return { 
       success: false, 
-      error: err.response?.data?.error || 'Invalid email or password'
+      error: getAuthErrorMessage(err, 'Invalid email or password')
     };
   }
 });
 
 ipcMain.handle('auth-register', async (e, name, email, password) => {
   try {
-    const response = await apiClient.post('/api/auth/register', { displayName: name, email, password });
-    completeAuthSuccess(response);
-    return { success: true, user: response.user };
+    const response = await supabaseClient.signUp({ displayName: name, email, password });
+    const session = getSessionPayload(response);
+
+    if (!session) {
+      return {
+        success: true,
+        pendingConfirmation: true,
+        message: 'Check your email to confirm your account before signing in.'
+      };
+    }
+
+    await completeAuthSuccess(session);
+    return { success: true, user: normalizeSupabaseUser(session.user) };
   } catch (err) {
     console.error('Register error:', err);
-    const errorMsg = err.response?.data?.error || 'Registration failed';
+    const errorMsg = getAuthErrorMessage(err, 'Registration failed');
     return { success: false, error: errorMsg };
   }
 });
 
 ipcMain.handle('auth-logout', async () => {
   try {
-    const refreshToken = store.get('auth.refreshToken');
-    if (refreshToken) {
-      await apiClient.post('/api/auth/logout', { refreshToken });
-    }
+    await supabaseClient.signOut();
   } catch (err) {
     console.error('Logout error:', err);
   }
   
+  stopClipboardMonitor();
   clearAuthSession();
   
   // Close widget and settings windows
@@ -957,86 +1148,21 @@ ipcMain.handle('auth-get-user', () => {
 
 ipcMain.handle('auth-forgot-password', async (e, email) => {
   try {
-    const response = await apiClient.post('/api/auth/forgot-password', { email });
-    return { success: true, ...response };
+    await supabaseClient.requestPasswordReset(email);
+    return {
+      success: true,
+      message: 'If the account exists, a reset link has been sent.'
+    };
   } catch (err) {
     console.error('Forgot password error:', err);
     return {
       success: false,
-      error: err.response?.data?.error || 'Password reset request failed'
+      error: getAuthErrorMessage(err, 'Password reset request failed')
     };
   }
 });
 
 // Auth success handler - close auth window and show widget
-ipcMain.on('auth-success', () => {
-  if (authWindow && !authWindow.isDestroyed()) {
-    authWindow.close();
-  }
-  launchMainApp();
-});
-
-// Get API client instance for renderer
-ipcMain.handle('api-get-client', () => {
-  return {
-    baseURL: apiClient.client?.defaults?.baseURL || 'http://localhost:3000',
-    hasToken: !!apiClient.getAccessToken()
-  };
-});
-
-// Set API tokens
-ipcMain.handle('api-set-tokens', (e, accessToken, refreshToken) => {
-  try {
-    apiClient.setTokens(accessToken, refreshToken);
-    return { success: true };
-  } catch (err) {
-    console.error('api-set-tokens error:', err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Clear API tokens
-ipcMain.handle('api-clear-tokens', () => {
-  try {
-    apiClient.clearTokens();
-    return { success: true };
-  } catch (err) {
-    console.error('api-clear-tokens error:', err);
-    return { success: false, error: err.message };
-  }
-});
-
-// Generic API request handler
-ipcMain.handle('api-request', async (e, method, url, data) => {
-  try {
-    let result;
-    switch (method.toUpperCase()) {
-      case 'GET':
-        result = await apiClient.get(url);
-        break;
-      case 'POST':
-        result = await apiClient.post(url, data);
-        break;
-      case 'PUT':
-        result = await apiClient.put(url, data);
-        break;
-      case 'DELETE':
-        result = await apiClient.delete(url);
-        break;
-      default:
-        throw new Error(`Unsupported method: ${method}`);
-    }
-    return { success: true, data: result };
-  } catch (err) {
-    console.error('api-request error:', err);
-    return { 
-      success: false, 
-      error: err.response?.data?.error || err.message,
-      statusCode: err.response?.status
-    };
-  }
-});
-
 // ── App lifecycle ─────────────────────────────────────────────────────────────
 app.whenReady().then(async () => {
   globalShortcut.register('CommandOrControl+Shift+F', () => {
@@ -1050,24 +1176,20 @@ app.whenReady().then(async () => {
   const refreshToken = store.get('auth.refreshToken');
   
   if (!accessToken || !refreshToken) {
-    // No tokens, show auth window
     createAuthWindow();
     return;
   }
   
-  // Validate token by fetching user profile
   try {
-    apiClient.setTokens(accessToken, refreshToken);
-    await apiClient.get('/api/user/profile');
-
-    if (!store.has('app.primaryUserId') && store.has('tasks')) {
-      const currentUserId = getCurrentUserId();
-      if (currentUserId) {
-        store.set('app.primaryUserId', currentUserId);
-      }
-    }
-    
-    // Token is valid, proceed to main app
+    supabaseClient.setSession(accessToken, refreshToken);
+    const user = await supabaseClient.getUser();
+    const normalizedUser = normalizeSupabaseUser(user);
+    store.set('auth.accessToken', supabaseClient.getSession().accessToken);
+    store.set('auth.refreshToken', supabaseClient.getSession().refreshToken);
+    store.set('auth.user', normalizedUser);
+    ensurePrimaryUserId(normalizedUser?.id);
+    clearCloudStateCache();
+    await ensureCloudStateLoaded(true);
     launchMainApp();
   } catch (err) {
     console.error('Token validation failed:', err);
@@ -1077,15 +1199,14 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', (e) => {
-  // Don't quit when all windows close — stay in tray
-  e.preventDefault();
+  // Only keep the app resident once the main app/tray has been launched.
+  if (!isQuitting && tray) {
+    e.preventDefault();
+  }
 });
 
 app.on('before-quit', () => {
+  isQuitting = true;
   stopClipboardMonitor();
   globalShortcut.unregisterAll();
-  if (lookupOpenTimeout) {
-    clearTimeout(lookupOpenTimeout);
-    lookupOpenTimeout = null;
-  }
 });

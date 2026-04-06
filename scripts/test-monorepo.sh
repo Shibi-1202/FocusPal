@@ -37,21 +37,13 @@ fail() {
 
 # Test 1: Check if packages exist
 test_step "Package directories exist"
-if [ -d "packages/shared" ] && [ -d "packages/desktop" ] && [ -d "packages/backend" ]; then
+if [ -d "packages/desktop" ]; then
     pass
 else
     fail "Missing package directories"
 fi
 
-# Test 2: Check if shared package is built
-test_step "Shared package built"
-if [ -d "packages/shared/dist" ] && [ -f "packages/shared/dist/index.js" ]; then
-    pass
-else
-    fail "Shared package not built"
-fi
-
-# Test 3: Check if node_modules exist
+# Test 2: Check if node_modules exist
 test_step "Dependencies installed"
 if [ -d "node_modules" ]; then
     pass
@@ -59,37 +51,15 @@ else
     fail "Dependencies not installed"
 fi
 
-# Test 4: Check if shared package can be imported
-test_step "Shared package importable"
-cd packages/desktop
-if node -e "const { APIClient } = require('@focuspal/shared'); console.log('OK');" > /dev/null 2>&1; then
-    cd ../..
-    pass
-else
-    cd ../..
-    fail "Cannot import shared package"
-fi
-
-# Test 5: Check if all exports are available
-test_step "All exports available"
-cd packages/desktop
-EXPORTS=$(node -e "const shared = require('@focuspal/shared'); console.log(Object.keys(shared).length);" 2>/dev/null)
-cd ../..
-if [ "$EXPORTS" -gt "10" ]; then
-    pass
-else
-    fail "Missing exports (found: $EXPORTS)"
-fi
-
-# Test 6: Check package.json files
+# Test 3: Check package.json files
 test_step "Package configurations valid"
-if [ -f "package.json" ] && [ -f "packages/shared/package.json" ] && [ -f "packages/desktop/package.json" ] && [ -f "packages/backend/package.json" ]; then
+if [ -f "package.json" ] && [ -f "packages/desktop/package.json" ]; then
     pass
 else
     fail "Missing package.json files"
 fi
 
-# Test 7: Check if workspace is configured
+# Test 4: Check if workspace is configured
 test_step "npm workspace configured"
 if grep -q '"workspaces"' package.json; then
     pass
@@ -97,25 +67,33 @@ else
     fail "Workspace not configured in root package.json"
 fi
 
-# Test 8: Check if shared package has correct main entry
-test_step "Shared package entry point"
-if grep -q '"main": "dist/index.js"' packages/shared/package.json; then
+# Test 5: Check desktop entry point
+test_step "Desktop entry point"
+if [ -f "packages/desktop/src/main/main.js" ]; then
     pass
 else
-    fail "Incorrect main entry in shared package"
+    fail "Missing desktop main process entry"
 fi
 
-# Test 9: Check if TypeScript config exists
-test_step "TypeScript configuration"
-if [ -f "packages/shared/tsconfig.json" ]; then
+# Test 6: Check desktop config
+test_step "Desktop Supabase configuration"
+if [ -f "packages/desktop/config/supabase.example.json" ] && [ -f "packages/desktop/src/main/supabaseConfig.js" ]; then
     pass
 else
-    fail "Missing TypeScript configuration"
+    fail "Missing Supabase configuration files"
 fi
 
-# Test 10: Check if documentation exists
+# Test 7: Check desktop packaging config
+test_step "Desktop packaging configuration"
+if [ -f "packages/desktop/electron-builder.yml" ]; then
+    pass
+else
+    fail "Missing electron-builder configuration"
+fi
+
+# Test 8: Check if documentation exists
 test_step "Documentation complete"
-if [ -f "README.md" ] && [ -f "QUICKSTART.md" ] && [ -f "COMMANDS.md" ]; then
+if [ -f "README.md" ] && [ -f "SUPABASE_SETUP.txt" ] && [ -f "GO_LIVE_INSTRUCTIONS.txt" ]; then
     pass
 else
     fail "Missing documentation files"

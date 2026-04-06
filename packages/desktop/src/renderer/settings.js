@@ -1,28 +1,11 @@
+  const { formatRelativeDateLabel } = window.FocusPalDateUtils;
+  const { normalizeNotificationSound } = window.FocusPalRendererUtils;
+  const { generateTaskId, getTodayString, shouldTaskAppearOnDate } = window.FocusPalTaskUtils;
   let shouldQuitAfterSave = false;
   let plannedTaskDate = null;
 
-  function getTomorrowString() {
-    const date = new Date();
-    date.setDate(date.getDate() + 1);
-    return date.toISOString().split('T')[0];
-  }
-
   function formatTaskDateLabel(dateString) {
-    if (!dateString) return 'Select a date';
-
-    const today = getTodayString();
-    const tomorrow = getTomorrowString();
-    if (dateString === today) return 'Today';
-    if (dateString === tomorrow) return 'Tomorrow';
-
-    const [year, month, day] = dateString.split('-').map(Number);
-    const localDate = new Date(year, month - 1, day);
-    return localDate.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric',
-      year: localDate.getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-    });
+    return formatRelativeDateLabel(dateString);
   }
 
   function setTaskDateInput(date = getTodayString()) {
@@ -35,6 +18,69 @@
     const input = document.getElementById('break-interval');
     input.value = normalized;
     input.defaultValue = normalized;
+  }
+
+  function setNotificationSoundInput(value) {
+    document.getElementById('notification-sound').value = normalizeNotificationSound(value);
+  }
+
+  const THEME_CUSTOM_INPUTS = {
+    bg: 'theme-bg',
+    bg2: 'theme-bg2',
+    bg3: 'theme-bg3',
+    accent: 'theme-accent',
+    accent2: 'theme-accent2',
+    text: 'theme-text',
+    muted: 'theme-muted'
+  };
+
+  function populateThemePresetOptions() {
+    const select = document.getElementById('theme-preset');
+    const options = Object.entries(window.FocusPalTheme?.PRESETS || {}).map(([value, preset]) =>
+      `<option value="${value}">${preset.label}</option>`
+    );
+    options.push('<option value="custom">Custom</option>');
+    select.innerHTML = options.join('');
+  }
+
+  function setThemeCustomizerVisibility(preset) {
+    document.getElementById('theme-custom-grid').classList.toggle('hidden', preset !== 'custom');
+  }
+
+  function setThemeControlValues(settings) {
+    const normalized = window.FocusPalTheme?.normalizeSettings(settings);
+    const resolved = window.FocusPalTheme?.resolveTheme(normalized);
+    const preset = normalized?.preset || window.FocusPalTheme?.DEFAULT_PRESET || 'focuspal';
+
+    document.getElementById('theme-preset').value = preset;
+
+    Object.entries(THEME_CUSTOM_INPUTS).forEach(([key, inputId]) => {
+      document.getElementById(inputId).value = resolved?.[key];
+    });
+
+    setThemeCustomizerVisibility(preset);
+  }
+
+  function collectThemeCustomColors() {
+    return Object.fromEntries(
+      Object.entries(THEME_CUSTOM_INPUTS).map(([key, inputId]) => [key, document.getElementById(inputId).value])
+    );
+  }
+
+  function getThemeSettingsFromControls() {
+    const preset = document.getElementById('theme-preset').value || window.FocusPalTheme?.DEFAULT_PRESET || 'focuspal';
+    if (preset === 'custom') {
+      return {
+        preset: 'custom',
+        custom: collectThemeCustomColors()
+      };
+    }
+
+    return { preset };
+  }
+
+  function previewThemeFromControls() {
+    window.FocusPalTheme?.applyTheme(getThemeSettingsFromControls());
   }
 
   // ── Tab switching ──────────────────────────────────────────────────────────
@@ -100,15 +146,19 @@
   let selectedPeriod = 'AM';
   const TIME_WHEEL_ITEM_HEIGHT = 44;
   const TIME_WHEEL_SPACERS = 2;
+  const TIME_WHEEL_REPEATS = 7;
   const timeWheelSnapTimers = new Map();
 
-  function buildWheelItems(values, formatter = (value) => value) {
+  function buildWheelItems(values, formatter = (value) => value, repeatCount = 1) {
     const spacers = Array.from({ length: TIME_WHEEL_SPACERS }, () =>
       '<div class="time-wheel-item spacer" aria-hidden="true"></div>'
     ).join('');
 
-    const items = values.map((value, index) =>
-      `<div class="time-wheel-item" data-index="${index}" data-value="${value}">${formatter(value)}</div>`
+    const items = Array.from({ length: repeatCount }, (_, repeatIndex) =>
+      values.map((value, baseIndex) => {
+        const virtualIndex = repeatIndex * values.length + baseIndex;
+        return `<div class="time-wheel-item" data-index="${virtualIndex}" data-base-index="${baseIndex}" data-value="${value}">${formatter(value)}</div>`;
+      }).join('')
     ).join('');
 
     return `${spacers}${items}${spacers}`;
@@ -118,14 +168,45 @@
     return Array.from(wheel.querySelectorAll('.time-wheel-item:not(.spacer)'));
   }
 
+  function getWheelBaseCount(wheel) {
+    return Number(wheel?.dataset.baseCount || 0);
+  }
+
+  function getWheelRepeatCount(wheel) {
+    return Number(wheel?.dataset.repeatCount || 1);
+  }
+
   function getClampedWheelIndex(wheel, index) {
     const maxIndex = Math.max(getWheelItems(wheel).length - 1, 0);
     return Math.min(Math.max(index, 0), maxIndex);
   }
 
+  function getWrappedWheelIndex(wheel, index) {
+    const baseCount = getWheelBaseCount(wheel) || 1;
+    return ((index % baseCount) + baseCount) % baseCount;
+  }
+
+  function getWheelMiddleIndex(wheel, index = 0) {
+    return Math.floor(getWheelRepeatCount(wheel) / 2) * getWheelBaseCount(wheel)
+      + getWrappedWheelIndex(wheel, index);
+  }
+
   function getSelectedWheelIndex(wheel) {
-    const currentIndex = Number(wheel.dataset.selectedIndex || 0);
-    return getClampedWheelIndex(wheel, currentIndex);
+    const currentIndex = Number(wheel.dataset.selectedIndex);
+    if (Number.isFinite(currentIndex)) {
+      return getClampedWheelIndex(wheel, currentIndex);
+    }
+
+    return getWheelMiddleIndex(wheel);
+  }
+
+  function getSelectedWheelBaseIndex(wheel) {
+    const currentIndex = Number(wheel.dataset.selectedBaseIndex);
+    if (Number.isFinite(currentIndex)) {
+      return getWrappedWheelIndex(wheel, currentIndex);
+    }
+
+    return getWrappedWheelIndex(wheel, getSelectedWheelIndex(wheel));
   }
 
   function setSelectedValueFromItem(wheelId, item) {
@@ -140,11 +221,46 @@
     }
   }
 
+  function renderWheel(wheel, values, formatter = (value) => value) {
+    const repeatCount = values.length > 1 ? TIME_WHEEL_REPEATS : 1;
+    wheel.dataset.baseCount = String(values.length);
+    wheel.dataset.repeatCount = String(repeatCount);
+    wheel.innerHTML = buildWheelItems(values, formatter, repeatCount);
+  }
+
+  function normalizeWheelIndex(wheel, index = null) {
+    const nextIndex = index === null
+      ? Math.round(wheel.scrollTop / TIME_WHEEL_ITEM_HEIGHT)
+      : index;
+    const clampedIndex = getClampedWheelIndex(wheel, nextIndex);
+    const baseCount = getWheelBaseCount(wheel);
+    const repeatCount = getWheelRepeatCount(wheel);
+
+    if (!baseCount || repeatCount <= 1) {
+      return clampedIndex;
+    }
+
+    const totalCount = baseCount * repeatCount;
+    const centeredIndex = getWheelMiddleIndex(wheel, clampedIndex);
+
+    if (clampedIndex < baseCount || clampedIndex >= totalCount - baseCount) {
+      wheel.scrollTop = centeredIndex * TIME_WHEEL_ITEM_HEIGHT;
+      return centeredIndex;
+    }
+
+    return clampedIndex;
+  }
+
   function scrollWheelToIndex(wheel, index, behavior = 'smooth') {
     const nextIndex = getClampedWheelIndex(wheel, index);
     wheel.dataset.selectedIndex = String(nextIndex);
+    wheel.dataset.selectedBaseIndex = String(getWrappedWheelIndex(wheel, nextIndex));
     wheel.scrollTo({ top: nextIndex * TIME_WHEEL_ITEM_HEIGHT, behavior });
     updateSelectedItems(wheel, nextIndex);
+  }
+
+  function scrollWheelToBaseIndex(wheel, baseIndex, behavior = 'smooth') {
+    scrollWheelToIndex(wheel, getWheelMiddleIndex(wheel, baseIndex), behavior);
   }
 
   function scheduleWheelSnap(wheel) {
@@ -152,12 +268,12 @@
     if (existingTimer) clearTimeout(existingTimer);
 
     timeWheelSnapTimers.set(wheel.id, setTimeout(() => {
-      scrollWheelToIndex(wheel, getSelectedWheelIndex(wheel));
+      scrollWheelToBaseIndex(wheel, getSelectedWheelBaseIndex(wheel));
     }, 90));
   }
 
   function stepWheelSelection(wheel, direction) {
-    scrollWheelToIndex(wheel, getSelectedWheelIndex(wheel) + direction);
+    scrollWheelToBaseIndex(wheel, getSelectedWheelBaseIndex(wheel) + direction);
   }
 
   function attachWheelInteractions(wheel) {
@@ -167,7 +283,7 @@
     wheel.tabIndex = 0;
 
     wheel.addEventListener('scroll', () => {
-      updateSelectedItems(wheel);
+      updateSelectedItems(wheel, normalizeWheelIndex(wheel));
       scheduleWheelSnap(wheel);
     }, { passive: true });
 
@@ -222,19 +338,23 @@
 
     // Generate hours
     const hours = timeFormat === '12' ? Array.from({length: 12}, (_, i) => i + 1) : Array.from({length: 24}, (_, i) => i);
-    hourWheel.innerHTML = buildWheelItems(hours, (h) => String(h).padStart(2, '0'));
+    renderWheel(hourWheel, hours, (h) => String(h).padStart(2, '0'));
 
     // Generate minutes (full 0-59 range)
     const minutes = Array.from({length: 60}, (_, i) => i);
-    minuteWheel.innerHTML = buildWheelItems(minutes, (m) => String(m).padStart(2, '0'));
+    renderWheel(minuteWheel, minutes, (m) => String(m).padStart(2, '0'));
 
     // Generate period (AM/PM) for 12-hour format
     if (timeFormat === '12') {
       periodWheel.style.display = 'block';
-      periodWheel.innerHTML = buildWheelItems(['AM', 'PM']);
+      renderWheel(periodWheel, ['AM', 'PM']);
     } else {
       periodWheel.style.display = 'none';
       periodWheel.innerHTML = '';
+      delete periodWheel.dataset.baseCount;
+      delete periodWheel.dataset.repeatCount;
+      delete periodWheel.dataset.selectedIndex;
+      delete periodWheel.dataset.selectedBaseIndex;
     }
 
     [hourWheel, minuteWheel, periodWheel].forEach(attachWheelInteractions);
@@ -250,7 +370,11 @@
     const items = getWheelItems(wheel);
     const targetIndex = items.findIndex(item => item.dataset.value == value);
     if (targetIndex !== -1) {
-      scrollWheelToIndex(wheel, targetIndex, behavior);
+      scrollWheelToBaseIndex(
+        wheel,
+        Number(items[targetIndex].dataset.baseIndex || targetIndex),
+        behavior
+      );
     }
   }
 
@@ -261,10 +385,11 @@
     if (!items.length) return;
 
     const selectedIndex = forcedIndex === null
-      ? getClampedWheelIndex(wheel, Math.round(wheel.scrollTop / TIME_WHEEL_ITEM_HEIGHT))
+      ? normalizeWheelIndex(wheel)
       : getClampedWheelIndex(wheel, forcedIndex);
 
     wheel.dataset.selectedIndex = String(selectedIndex);
+    wheel.dataset.selectedBaseIndex = String(getWrappedWheelIndex(wheel, selectedIndex));
 
     items.forEach(item => {
       const itemIndex = Number(item.dataset.index || 0);
@@ -368,35 +493,36 @@
     }
   });
 
+  document.getElementById('btn-preview-notification-sound').addEventListener('click', async () => {
+    const selectedSound = normalizeNotificationSound(document.getElementById('notification-sound').value);
+    await window.FocusPalNotificationSound?.play(selectedSound);
+  });
+
+  document.getElementById('theme-preset').addEventListener('change', () => {
+    const preset = document.getElementById('theme-preset').value;
+    if (preset !== 'custom') {
+      setThemeControlValues({ preset });
+    }
+    setThemeCustomizerVisibility(preset);
+    previewThemeFromControls();
+  });
+
+  Object.values(THEME_CUSTOM_INPUTS).forEach((inputId) => {
+    document.getElementById(inputId).addEventListener('input', () => {
+      const presetSelect = document.getElementById('theme-preset');
+      if (presetSelect.value !== 'custom') {
+        presetSelect.value = 'custom';
+        setThemeCustomizerVisibility('custom');
+      }
+      previewThemeFromControls();
+    });
+  });
+
   // ── Task list ──────────────────────────────────────────────────────────────
   let tasks = [];
 
-  function getTodayString() {
-    return new Date().toISOString().split('T')[0];
-  }
-
   function isTaskForToday(task) {
-    const today = getTodayString();
-    const scheduledDate = task.instanceDate || task.taskDate;
-
-    if (scheduledDate) {
-      return scheduledDate === today;
-    }
-
-    if (!task.recurring || task.recurring === 'none') {
-      return !task.createdAt || task.createdAt.startsWith(today);
-    }
-
-    const dayOfWeek = new Date().getDay();
-    if (task.recurring === 'daily') return true;
-    if (task.recurring === 'weekdays') return dayOfWeek >= 1 && dayOfWeek <= 5;
-    if (task.recurring === 'weekends') return dayOfWeek === 0 || dayOfWeek === 6;
-
-    return false;
-  }
-
-  function generateTaskId() {
-    return `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    return shouldTaskAppearOnDate(task, getTodayString());
   }
 
   function renderTaskList() {
@@ -437,7 +563,6 @@
     
     // Save immediately
     await window.fp.set('tasks', tasks);
-    await syncTasksToCloud(tasks);
     
     // Notify widget to reload
     window.fp.notifySettingsUpdated();
@@ -450,25 +575,15 @@
       tasks = [];
       renderTaskList();
       await window.fp.set('tasks', []);
-      await syncTasksToCloud([]);
       window.fp.notifySettingsUpdated();
       showToast('✓ All tasks cleared');
-    }
-  }
-
-  async function clearWordCache() {
-    if (confirm('Clear word lookup cache?')) {
-      await window.fp.set('wordCache', []);
-      await window.fp.api.request('DELETE', '/api/word-lookup/cache');
-      showToast('✓ Word cache cleared');
     }
   }
 
   // ── Account management ─────────────────────────────────────────────────────
   async function loadAccountInfo() {
     try {
-      const profileResult = await window.fp.api.request('GET', '/api/user/profile');
-      const user = profileResult?.success ? profileResult.data?.user : await window.fp.auth.getUser();
+      const user = await window.fp.auth.getUser();
 
       if (user) {
         document.getElementById('account-email').textContent = user.email || 'N/A';
@@ -484,7 +599,12 @@
         } else {
           document.getElementById('account-created').textContent = 'N/A';
         }
+        return;
       }
+
+      document.getElementById('account-email').textContent = 'N/A';
+      document.getElementById('account-name').textContent = 'N/A';
+      document.getElementById('account-created').textContent = 'N/A';
     } catch (err) {
       console.error('Failed to load account info:', err);
       document.getElementById('account-email').textContent = 'Error loading account';
@@ -502,33 +622,6 @@
     } catch (err) {
       console.error('Logout error:', err);
       alert('Failed to logout. Please try again.');
-    }
-  }
-
-  async function syncTasksToCloud(taskList) {
-    const result = await window.fp.api.request('POST', '/api/tasks/sync', {
-      tasks: taskList,
-      lastSync: await window.fp.get('lastCloudTaskSync')
-    });
-
-    if (result?.success) {
-      await window.fp.set('lastCloudTaskSync', new Date().toISOString());
-    } else {
-      console.error('Task sync error:', result?.error || 'Unknown sync failure');
-    }
-  }
-
-  async function syncSettingsToCloud() {
-    const result = await window.fp.api.request('PUT', '/api/settings', {
-      wordLookupCacheSize: parseInt(document.getElementById('word-cache-size').value) || 20,
-      pomodoroWorkDuration: parseInt(document.getElementById('pomodoro-work').value) || 25,
-      pomodoroShortBreak: parseInt(document.getElementById('pomodoro-short-break').value) || 5,
-      pomodoroLongBreak: parseInt(document.getElementById('pomodoro-long-break').value) || 15,
-      pomodoroCyclesBeforeLong: parseInt(document.getElementById('pomodoro-cycles').value) || 4
-    });
-
-    if (!result?.success) {
-      console.error('Settings sync error:', result?.error || 'Unknown sync failure');
     }
   }
 
@@ -564,7 +657,6 @@
 
     // Save immediately
     await window.fp.set('tasks', tasks);
-    await syncTasksToCloud(tasks);
     
     // Notify widget to reload
     window.fp.notifySettingsUpdated();
@@ -591,10 +683,16 @@
   // ── Save all ───────────────────────────────────────────────────────────────
   async function saveAll() {
     const breakInterval = parseInt(document.getElementById('break-interval').value, 10) || 45;
+    const notificationSound = normalizeNotificationSound(document.getElementById('notification-sound').value);
+    const appTheme = window.FocusPalTheme?.normalizeSettings(getThemeSettingsFromControls()) || { preset: 'focuspal' };
 
     await window.fp.set('tasks', tasks);
     await window.fp.set('breakInterval', breakInterval);
+    await window.fp.set('notificationSound', notificationSound);
+    await window.fp.set('appTheme', appTheme);
     setBreakIntervalInput(breakInterval);
+    setNotificationSoundInput(notificationSound);
+    window.FocusPalTheme?.applyTheme(appTheme);
     await window.fp.set('breakWater',   document.getElementById('toggle-water').checked);
     await window.fp.set('breakStretch', document.getElementById('toggle-stretch').checked);
     await window.fp.set('breakEyes',    document.getElementById('toggle-eyes').checked);
@@ -603,7 +701,7 @@
     await window.fp.set('breakEyesMessage', document.getElementById('break-message-eyes').value.trim());
     await window.fp.set('eodPrompt',    document.getElementById('toggle-eod').checked);
     await window.fp.set('taskConfirmations', document.getElementById('toggle-confirmations').checked);
-    await window.fp.set('wordCacheSize', parseInt(document.getElementById('word-cache-size').value) || 20);
+    await window.fp.set('wordLookupEnabled', document.getElementById('toggle-word-lookup').checked);
     
     // Pomodoro settings
     await window.fp.set('pomodoroSettings', {
@@ -621,8 +719,6 @@
     // Handle auto-start
     const autoStart = document.getElementById('toggle-startup').checked;
     await window.fp.setAutoStart(autoStart);
-    await syncTasksToCloud(tasks);
-    await syncSettingsToCloud();
 
     window.fp.notifySettingsUpdated();
 
@@ -642,6 +738,7 @@
 
   // ── Load saved settings ────────────────────────────────────────────────────
   async function loadSettings() {
+    await window.FocusPalTheme?.loadAndApply();
     tasks = (await window.fp.get('tasks')) || [];
     const [
       interval,
@@ -654,8 +751,10 @@
       eyes,
       eod,
       confirmations,
+      wordLookupEnabled,
       autoStart,
-      cacheSize
+      notificationSound,
+      appTheme
     ] = await Promise.all([
       window.fp.get('breakInterval'),
       window.fp.get('breakMessage'),
@@ -667,12 +766,16 @@
       window.fp.get('breakEyes'),
       window.fp.get('eodPrompt'),
       window.fp.get('taskConfirmations'),
+      window.fp.get('wordLookupEnabled'),
       window.fp.getAutoStart(),
-      window.fp.get('wordCacheSize')
+      window.fp.get('notificationSound'),
+      window.fp.get('appTheme')
     ]);
 
     setTaskDateInput(plannedTaskDate || getTodayString());
     setBreakIntervalInput(interval ?? 45);
+    setNotificationSoundInput(notificationSound);
+    setThemeControlValues(appTheme);
     document.getElementById('break-message-water').value = waterMsg || legacyBreakMessage || '';
     document.getElementById('break-message-stretch').value = stretchMsg || '';
     document.getElementById('break-message-eyes').value = eyesMsg || '';
@@ -682,8 +785,8 @@
     if (eyes    !== undefined) document.getElementById('toggle-eyes').checked       = eyes;
     if (eod     !== undefined) document.getElementById('toggle-eod').checked        = eod;
     if (confirmations !== undefined) document.getElementById('toggle-confirmations').checked = confirmations;
+    document.getElementById('toggle-word-lookup').checked = wordLookupEnabled !== false;
     if (autoStart !== undefined) document.getElementById('toggle-startup').checked  = autoStart;
-    if (cacheSize !== undefined) document.getElementById('word-cache-size').value = cacheSize;
 
     renderTaskList();
     
@@ -702,17 +805,8 @@
     }
   }
 
+  populateThemePresetOptions();
+  window.fp.onLookupSettingUpdated((data) => {
+    document.getElementById('toggle-word-lookup').checked = data?.enabled !== false;
+  });
   loadSettings();
-
-  // Parse natural language task
-  function getPriorityColor(priority) {
-    const colors = {
-      critical: '#d6542c',
-      high: '#124c81',
-      medium: '#4a6190',
-      low: '#98a8bb',
-      info: '#eda28a',
-      personal: '#3c345c'
-    };
-    return colors[priority] || colors.medium;
-  }
