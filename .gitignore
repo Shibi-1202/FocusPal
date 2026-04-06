@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+*/node_modules/
+**/node_modules/
+
+# Build outputs
+dist/
+*/dist/
+**/dist/
+build/
+*/build/
+**/build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# IDE
+.vscode/
+.idea/
+*.iml
+.kiro/
+
+# Electron
+packages/desktop/dist/
+packages/desktop/out/
+
+# Mobile (future)
+packages/mobile/android/app/build/
+packages/mobile/ios/build/
+packages/mobile/.expo/
+
+# Backend
+packages/backend/dist/
+
+# Shared
+packages/shared/dist/
+
+# Test coverage
+coverage/
+*.lcov
+
+# Temporary files
+*.tmp
+.cache/

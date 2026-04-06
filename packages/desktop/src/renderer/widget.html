@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FocusPal Widget</title>
+<link rel="stylesheet" href="./widget.css">
+</head>
+<body>
+
+<!-- Collapsed dot -->
+<div id="dot" title="FocusPal" ondblclick="window.fp.openSettings('tasks')">
+  <div class="dot-inner"></div>
+  <div class="collapsed-content">
+    <div class="pill-title" id="pill-title">FocusPal</div>
+    <div class="pill-time" id="pill-time">Idle</div>
+  </div>
+  <span class="lookup-indicator" title="Word lookup active">📖</span>
+</div>
+
+<!-- Expanded card -->
+<div id="card">
+  <div class="drag-handle" id="drag-handle"></div>
+
+  <div class="card-header">
+    <span class="logo">FocusPal</span>
+    <div class="header-actions">
+      <button class="icon-btn active" id="btn-lookup-status" title="Word lookup active">📖</button>
+      <button class="icon-btn" id="btn-settings" title="Settings">⚙</button>
+      <button class="icon-btn" id="btn-collapse" title="Minimize">−</button>
+      <button class="icon-btn" id="btn-close" title="Close" style="color: var(--red);">✕</button>
+    </div>
+  </div>
+
+  <div id="main-content">
+    <!-- Populated by JS -->
+  </div>
+
+  <div id="break-bar">
+    <span class="bb-icon">💧</span>
+    <span class="bb-text" id="break-text">Time for a water break!</span>
+    <button class="bb-dismiss" id="break-dismiss">Done</button>
+  </div>
+
+  <div class="bottom-bar">
+    <div class="action-buttons">
+      <button class="icon-btn" id="btn-focus" title="Focus Mode (Ctrl+Shift+F)" style="font-size: 16px;">🎯</button>
+      <button class="icon-btn" id="btn-pomodoro" title="Start Pomodoro" style="font-size: 16px;">🍅</button>
+    </div>
+    <div id="clock"></div>
+  </div>
+</div>
+
+<!-- Lookup card -->
+<div id="lookup-card">
+  <div class="lookup-header">
+    <span class="lookup-word" id="lookup-word">Loading...</span>
+    <button class="lookup-close" id="lookup-close">✕</button>
+  </div>
+  <div class="lookup-content">
+    <div class="lookup-column" id="lookup-definition-col">
+      <div class="lookup-section-title">Meaning</div>
+      <div id="lookup-definition-content" class="lookup-loading">Loading...</div>
+    </div>
+    <div class="lookup-column translation-column" id="lookup-translation-col">
+      <div class="lookup-section-title">Tamil Translation</div>
+      <div id="lookup-translation-content" class="lookup-loading">Loading...</div>
+    </div>
+  </div>
+</div>
+
+<!-- In-app notification -->
+<div id="notification">
+  <div class="notification-header">
+    <span class="notification-icon" id="notification-icon">🔔</span>
+    <span class="notification-title" id="notification-title">Notification</span>
+    <button class="notification-close" id="notification-close">✕</button>
+  </div>
+  <div class="notification-body" id="notification-body">
+    Notification message
+  </div>
+</div>
+
+<script src="./widget.js"></script>
+</body>
+</html>

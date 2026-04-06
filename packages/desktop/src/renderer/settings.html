@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>FocusPal Settings</title>
+<link rel="stylesheet" href="./settings.css">
+</head>
+<body>
+<div class="app">
+
+  <div class="titlebar">
+    <h1>FocusPal Settings</h1>
+    <button class="close-btn" onclick="window.fp.closeSettings()">✕</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="tasks">Tasks</div>
+    <div class="tab" data-tab="pomodoro">Pomodoro</div>
+    <div class="tab" data-tab="breaks">Breaks</div>
+    <div class="tab" data-tab="general">General</div>
+    <div class="tab" data-tab="account">Account</div>
+  </div>
+
+  <div class="panels">
+
+    <!-- ── Tasks panel ──────────────────────────────────── -->
+    <div class="panel active" id="panel-tasks">
+      <div class="section">
+        <div class="section-label">Today's schedule</div>
+        <div id="task-list"></div>
+      </div>
+
+      <div class="add-task-form">
+        <h3>Add task</h3>
+        <div class="field">
+          <label>Task name</label>
+          <input type="text" id="new-name" placeholder="e.g. Deep work session"/>
+        </div>
+        <div class="field">
+          <label>Date</label>
+          <button type="button" class="date-picker-trigger" id="task-date-trigger">
+            <div class="date-picker-copy">
+              <div class="date-picker-label">Scheduled For</div>
+              <div class="date-picker-value" id="task-date-display">Today</div>
+            </div>
+            <span class="date-picker-icon">📅</span>
+          </button>
+          <input type="date" id="task-date" class="native-date-input"/>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Start time</label>
+            <div class="time-picker-trigger" id="start-time-trigger">
+              <span id="start-time-display">09:00</span>
+              <span style="color:var(--muted); font-size:11px;">▼</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>End time</label>
+            <div class="time-picker-trigger" id="end-time-trigger">
+              <span id="end-time-display">10:00</span>
+              <span style="color:var(--muted); font-size:11px;">▼</span>
+            </div>
+          </div>
+        </div>
+        <div class="field">
+          <label>Recurring</label>
+          <select id="task-recurring">
+            <option value="none">None (one-time)</option>
+            <option value="daily">Daily</option>
+            <option value="weekdays">Weekdays (Mon-Fri)</option>
+            <option value="weekends">Weekends (Sat-Sun)</option>
+          </select>
+        </div>
+        <label style="margin-bottom:8px;">Priority</label>
+        <div class="priority-row" id="priority-picker">
+          <div class="priority-option selected" data-priority="critical" data-color="#d6542c">
+            <div class="priority-dot" style="background:#d6542c"></div>
+            <span>Critical</span>
+          </div>
+          <div class="priority-option" data-priority="high" data-color="#124c81">
+            <div class="priority-dot" style="background:#124c81"></div>
+            <span>High</span>
+          </div>
+          <div class="priority-option" data-priority="medium" data-color="#4a6190">
+            <div class="priority-dot" style="background:#4a6190"></div>
+            <span>Medium</span>
+          </div>
+          <div class="priority-option" data-priority="low" data-color="#98a8bb">
+            <div class="priority-dot" style="background:#98a8bb"></div>
+            <span>Low</span>
+          </div>
+          <div class="priority-option" data-priority="info" data-color="#eda28a">
+            <div class="priority-dot" style="background:#eda28a"></div>
+            <span>Info</span>
+          </div>
+          <div class="priority-option" data-priority="personal" data-color="#3c345c">
+            <div class="priority-dot" style="background:#3c345c"></div>
+            <span>Personal</span>
+          </div>
+        </div>
+        <button class="btn-primary" id="btn-add-task">+ Add task</button>
+      </div>
+
+    </div>
+
+    <!-- ── Pomodoro panel ────────────────────────────────── -->
+    <div class="panel" id="panel-pomodoro">
+      <div class="section">
+        <div class="section-label">Timer Settings</div>
+        
+        <div class="field">
+          <label>Work Duration (minutes)</label>
+          <input type="number" id="pomodoro-work" min="1" max="60" value="25" />
+        </div>
+        
+        <div class="field">
+          <label>Short Break (minutes)</label>
+          <input type="number" id="pomodoro-short-break" min="1" max="30" value="5" />
+        </div>
+        
+        <div class="field">
+          <label>Long Break (minutes)</label>
+          <input type="number" id="pomodoro-long-break" min="1" max="60" value="15" />
+        </div>
+        
+        <div class="field">
+          <label>Cycles before long break</label>
+          <input type="number" id="pomodoro-cycles" min="1" max="10" value="4" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Behavior</div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Auto-start breaks</strong>
+            <span>Automatically start break timer</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="pomodoro-auto-break" checked/>
+            <span class="knob"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Auto-start next work</strong>
+            <span>Automatically start next pomodoro</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="pomodoro-auto-work" checked/>
+            <span class="knob"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Strict mode</strong>
+            <span>Cannot skip or pause pomodoro</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="pomodoro-strict"/>
+            <span class="knob"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Focus Mode</div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Auto-activate for Critical tasks</strong>
+            <span>Enable focus mode for critical priority</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="focus-auto-critical"/>
+            <span class="knob"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Mute break reminders</strong>
+            <span>Disable breaks during focus mode</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="focus-mute-breaks"/>
+            <span class="knob"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Breaks panel ─────────────────────────────────── -->
+    <div class="panel" id="panel-breaks">
+      <div class="section">
+        <div class="section-label">Break reminders</div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Water break</strong>
+            <span>Remind me to drink water</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-water" checked/>
+            <span class="knob"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Stretch reminder</strong>
+            <span>Stand up and move around</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-stretch"/>
+            <span class="knob"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Eye rest (20-20-20)</strong>
+            <span>Look 20ft away for 20 seconds</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-eyes"/>
+            <span class="knob"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Interval</div>
+        <div class="field">
+          <label>Remind me every (minutes)</label>
+          <input type="number" id="break-interval" min="5" max="180" placeholder="45"/>
+        </div>
+        <div class="field">
+          <label>Water break message</label>
+          <input type="text" id="break-message-water" placeholder="Time for a water break!"/>
+        </div>
+        <div class="field">
+          <label>Stretch break message</label>
+          <input type="text" id="break-message-stretch" placeholder="Time to stretch and move around!"/>
+        </div>
+        <div class="field">
+          <label>Eye rest message</label>
+          <input type="text" id="break-message-eyes" placeholder="Eye rest: look 20ft away for 20 seconds"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── General panel ────────────────────────────────── -->
+    <div class="panel" id="panel-general">
+      <div class="section">
+        <div class="section-label">Behaviour</div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Start with system</strong>
+            <span>Launch FocusPal on login</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-startup"/>
+            <span class="knob"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>EOD planning prompt</strong>
+            <span>Remind me to plan tomorrow before quitting</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-eod" checked/>
+            <span class="knob"></span>
+          </label>
+        </div>
+        <div class="toggle-row">
+          <div class="toggle-info">
+            <strong>Task confirmations</strong>
+            <span>Show dialogs when tasks start and end</span>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="toggle-confirmations" checked/>
+            <span class="knob"></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Data</div>
+        <button class="btn-outline" onclick="clearAllTasks()">Clear all tasks</button>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Word Lookup</div>
+        <div style="padding: 10px 0; color: var(--muted); font-size: 12px; line-height: 1.5;">
+          ℹ️ Word lookup is always active. Select any single word to see its definition and Tamil translation.
+        </div>
+        <div class="field">
+          <label>Cache size (10-100 words)</label>
+          <input type="number" id="word-cache-size" min="10" max="100" value="20" placeholder="20"/>
+        </div>
+        <button class="btn-outline" onclick="clearWordCache()">Clear word cache</button>
+      </div>
+    </div>
+
+    <!-- ── Account panel ────────────────────────────────── -->
+    <div class="panel" id="panel-account">
+      <div class="section">
+        <div class="section-label">Account Information</div>
+        <div style="padding: 10px 0;">
+          <div style="margin-bottom: 12px;">
+            <div style="color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Email</div>
+            <div id="account-email" style="font-size: 14px; color: var(--text);">Loading...</div>
+          </div>
+          <div style="margin-bottom: 12px;">
+            <div style="color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Display Name</div>
+            <div id="account-name" style="font-size: 14px; color: var(--text);">Loading...</div>
+          </div>
+          <div>
+            <div style="color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Member Since</div>
+            <div id="account-created" style="font-size: 14px; color: var(--text);">Loading...</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">Session</div>
+        <button class="btn-outline" onclick="handleLogout()" style="width: 100%; background: rgba(239, 68, 68, 0.1); border-color: var(--red); color: var(--red);">
+          <span style="margin-right: 8px;">🚪</span> Logout
+        </button>
+        <div style="padding: 10px 0; color: var(--muted); font-size: 11px; line-height: 1.5; text-align: center;">
+          Logging out returns you to the sign-in screen. You'll need to sign in again to continue.
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="section-label">About</div>
+        <div style="padding: 10px 0; color: var(--muted); font-size: 12px; line-height: 1.6;">
+          <div style="margin-bottom: 8px;"><strong style="color: var(--text);">FocusPal</strong> v1.0.0</div>
+          <div>Your personal productivity companion</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="save-bar">
+    <button class="cancel-btn" onclick="window.fp.closeSettings()">Cancel</button>
+    <button class="save-btn" onclick="saveAll()">Save changes</button>
+  </div>
+</div>
+
+<div class="toast" id="toast">Saved!</div>
+
+<!-- Time picker modal -->
+<div class="time-picker-modal" id="time-picker-modal">
+  <div class="time-picker-content">
+    <div class="time-picker-header">
+      <h3 id="time-picker-title">Select Time</h3>
+      <div class="time-picker-format">
+        <button class="format-btn active" data-format="12">12H</button>
+        <button class="format-btn" data-format="24">24H</button>
+      </div>
+    </div>
+    <div class="time-picker-wheels">
+      <div class="time-wheel" id="hour-wheel"></div>
+      <div class="time-wheel" id="minute-wheel"></div>
+      <div class="time-wheel" id="period-wheel"></div>
+    </div>
+    <div class="time-picker-actions">
+      <button class="btn-cancel" id="time-picker-cancel">Cancel</button>
+      <button class="btn-confirm" id="time-picker-confirm">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<script src="./settings.js"></script>
+</body>
+</html>

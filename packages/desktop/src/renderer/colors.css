@@ -1,0 +1,96 @@
+/* FocusPal Color Palette */
+
+:root {
+  /* Primary Colors */
+  --primary-orange: #d6542c;
+  --primary-peach: #eda28a;
+  --primary-blue: #124c81;
+  --primary-slate: #4a6190;
+  --primary-gray: #98a8bb;
+  --primary-purple: #3c345c;
+  
+  /* Background Colors */
+  --bg-dark: #1a1a1a;
+  --bg-darker: #0f0f0f;
+  --bg-card: #242424;
+  --bg-hover: #2a2a2a;
+  
+  /* Text Colors */
+  --text-primary: #ffffff;
+  --text-secondary: #98a8bb;
+  --text-muted: #6b7280;
+  
+  /* Accent Colors */
+  --accent-orange: #d6542c;
+  --accent-blue: #124c81;
+  --accent-purple: #3c345c;
+  
+  /* Priority Colors (for tasks) */
+  --priority-critical: #d6542c;    /* Orange - Urgent */
+  --priority-high: #124c81;        /* Blue - Important */
+  --priority-medium: #4a6190;      /* Slate - Normal */
+  --priority-low: #98a8bb;         /* Gray - Flexible */
+  --priority-info: #eda28a;        /* Peach - Info/Notes */
+  --priority-personal: #3c345c;    /* Purple - Personal */
+  
+  /* Status Colors */
+  --success: #10b981;
+  --warning: #f59e0b;
+  --error: #ef4444;
+  --info: #3b82f6;
+  
+  /* Border & Shadow */
+  --border-color: #2a2a2a;
+  --border-hover: #3a3a3a;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+  
+  /* Glow Effects */
+  --glow-orange: 0 0 20px rgba(214, 84, 44, 0.3);
+  --glow-blue: 0 0 20px rgba(18, 76, 129, 0.3);
+  --glow-purple: 0 0 20px rgba(60, 52, 92, 0.3);
+  
+  /* Opacity Levels */
+  --opacity-idle: 0.75;
+  --opacity-hover: 0.9;
+  --opacity-active: 1;
+}
+
+/* Dark theme (default) */
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+}
+
+/* Utility Classes */
+.bg-primary { background-color: var(--primary-orange); }
+.bg-secondary { background-color: var(--primary-blue); }
+.bg-accent { background-color: var(--primary-purple); }
+
+.text-primary { color: var(--text-primary); }
+.text-secondary { color: var(--text-secondary); }
+.text-muted { color: var(--text-muted); }
+
+.border-default { border-color: var(--border-color); }
+.border-hover:hover { border-color: var(--border-hover); }
+
+/* Priority Color Classes */
+.priority-critical { color: var(--priority-critical); }
+.priority-high { color: var(--priority-high); }
+.priority-medium { color: var(--priority-medium); }
+.priority-low { color: var(--priority-low); }
+.priority-info { color: var(--priority-info); }
+.priority-personal { color: var(--priority-personal); }
+
+.bg-priority-critical { background-color: var(--priority-critical); }
+.bg-priority-high { background-color: var(--priority-high); }
+.bg-priority-medium { background-color: var(--priority-medium); }
+.bg-priority-low { background-color: var(--priority-low); }
+.bg-priority-info { background-color: var(--priority-info); }
+.bg-priority-personal { background-color: var(--priority-personal); }
+
+/* Glow Effects */
+.glow-orange { box-shadow: var(--glow-orange); }
+.glow-blue { box-shadow: var(--glow-blue); }
+.glow-purple { box-shadow: var(--glow-purple); }

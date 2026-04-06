@@ -1,0 +1,48 @@
+{
+  "name": "@focuspal/desktop",
+  "version": "1.0.0",
+  "description": "FocusPal Desktop App - Your personal productivity companion",
+  "main": "src/main/main.js",
+  "author": {
+    "name": "FocusPal Team",
+    "email": "support@focuspal.com"
+  },
+  "homepage": "https://focuspal.com",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron . --no-sandbox",
+    "dev": "electron . --dev --no-sandbox",
+    "build": "electron-builder",
+    "build-linux": "electron-builder --linux",
+    "build-win": "electron-builder --win",
+    "build-all": "electron-builder --linux --win"
+  },
+  "dependencies": {
+    "@focuspal/shared": "1.0.0",
+    "electron-store": "^8.1.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  },
+  "build": {
+    "appId": "com.focuspal.app",
+    "productName": "FocusPal",
+    "directories": {
+      "output": "dist"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility",
+      "maintainer": "FocusPal Team <support@focuspal.com>",
+      "executableName": "focuspal"
+    },
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "files": [
+      "src/**/*"
+    ],
+    "artifactName": "${productName}-${version}.${ext}"
+  }
+}
