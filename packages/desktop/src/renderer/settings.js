@@ -1,8 +1,22 @@
   const { formatRelativeDateLabel } = window.FocusPalDateUtils;
   const { normalizeNotificationSound } = window.FocusPalRendererUtils;
   const { generateTaskId, getTodayString, shouldTaskAppearOnDate } = window.FocusPalTaskUtils;
+  const BREAK_INTERVAL_DEFAULTS = {
+    water: 45,
+    stretch: 60,
+    eyes: 20
+  };
+  const TASK_TIME_INCREMENT_MINUTES = 30;
+  const TASK_DURATION_DEFAULT_MINUTES = 60;
   let shouldQuitAfterSave = false;
   let plannedTaskDate = null;
+  let dateTimePickerState = {
+    selectedDate: getTodayString(),
+    visibleMonth: null,
+    startTime: '09:00',
+    endTime: '10:00',
+    focusTarget: 'date'
+  };
 
   function formatTaskDateLabel(dateString) {
     return formatRelativeDateLabel(dateString);
@@ -13,11 +27,110 @@
     document.getElementById('task-date-display').textContent = formatTaskDateLabel(date);
   }
 
-  function setBreakIntervalInput(value) {
-    const normalized = String(value ?? 45);
-    const input = document.getElementById('break-interval');
-    input.value = normalized;
-    input.defaultValue = normalized;
+  function padTimePart(value) {
+    return String(value).padStart(2, '0');
+  }
+
+  function formatDateInputValue(date) {
+    return `${date.getFullYear()}-${padTimePart(date.getMonth() + 1)}-${padTimePart(date.getDate())}`;
+  }
+
+  function parseDateInputValue(value) {
+    if (!value) {
+      return new Date();
+    }
+
+    const [year, month, day] = String(value).split('-').map(Number);
+    const parsed = new Date(year, (month || 1) - 1, day || 1);
+
+    if (Number.isNaN(parsed.getTime())) {
+      return new Date();
+    }
+
+    return parsed;
+  }
+
+  function parseTimeString(value = '00:00') {
+    const [hours = 0, minutes = 0] = String(value).split(':').map(Number);
+    return {
+      hours: Math.min(Math.max(Number.isFinite(hours) ? hours : 0, 0), 23),
+      minutes: Math.min(Math.max(Number.isFinite(minutes) ? minutes : 0, 0), 59)
+    };
+  }
+
+  function formatTimeString(hours, minutes) {
+    return `${padTimePart(hours)}:${padTimePart(minutes)}`;
+  }
+
+  function timeStringToMinutes(value) {
+    const { hours, minutes } = parseTimeString(value);
+    return (hours * 60) + minutes;
+  }
+
+  function minutesToTimeString(totalMinutes) {
+    const normalized = Math.min(Math.max(totalMinutes, 0), (23 * 60) + 59);
+    return formatTimeString(Math.floor(normalized / 60), normalized % 60);
+  }
+
+  function clampBreakIntervalValue(value, fallback) {
+    const parsed = parseInt(value, 10);
+    return Number.isFinite(parsed) ? Math.min(Math.max(parsed, 5), 180) : fallback;
+  }
+
+  function setBreakIntervalInputs(values = {}) {
+    const mapping = {
+      water: 'break-interval-water',
+      stretch: 'break-interval-stretch',
+      eyes: 'break-interval-eyes'
+    };
+
+    Object.entries(mapping).forEach(([key, inputId]) => {
+      const normalized = String(values[key] ?? BREAK_INTERVAL_DEFAULTS[key]);
+      const input = document.getElementById(inputId);
+      input.value = normalized;
+      input.defaultValue = normalized;
+    });
+  }
+
+  function setTaskTimeInputs(start, end) {
+    document.getElementById('start-time-display').textContent = start;
+    document.getElementById('end-time-display').textContent = end;
+  }
+
+  function roundDateToNextIncrement(reference = new Date()) {
+    const rounded = new Date(reference);
+    rounded.setSeconds(0, 0);
+
+    const remainder = rounded.getMinutes() % TASK_TIME_INCREMENT_MINUTES;
+    if (remainder !== 0) {
+      rounded.setMinutes(rounded.getMinutes() + (TASK_TIME_INCREMENT_MINUTES - remainder));
+    }
+
+    return rounded;
+  }
+
+  function getAdaptiveTaskTimeRange(reference = new Date()) {
+    const startDate = roundDateToNextIncrement(reference);
+    const endDate = new Date(startDate.getTime() + (TASK_DURATION_DEFAULT_MINUTES * 60 * 1000));
+    const start = formatTimeString(startDate.getHours(), startDate.getMinutes());
+
+    if (
+      endDate.getFullYear() !== startDate.getFullYear()
+      || endDate.getMonth() !== startDate.getMonth()
+      || endDate.getDate() !== startDate.getDate()
+    ) {
+      return { start, end: '23:59' };
+    }
+
+    return {
+      start,
+      end: formatTimeString(endDate.getHours(), endDate.getMinutes())
+    };
+  }
+
+  function applyAdaptiveTaskTimeDefaults() {
+    const { start, end } = getAdaptiveTaskTimeRange();
+    setTaskTimeInputs(start, end);
   }
 
   function setNotificationSoundInput(value) {
@@ -138,16 +251,48 @@
     });
   });
 
-  // ── Time picker ────────────────────────────────────────────────────────────
-  let timeFormat = '12'; // 12 or 24
-  let currentTimeTarget = null; // 'start' or 'end'
+  // ── Date and time picker ──────────────────────────────────────────────────
+  let currentTimeTarget = 'start';
   let selectedHour = 9;
   let selectedMinute = 0;
-  let selectedPeriod = 'AM';
   const TIME_WHEEL_ITEM_HEIGHT = 44;
   const TIME_WHEEL_SPACERS = 2;
   const TIME_WHEEL_REPEATS = 7;
   const timeWheelSnapTimers = new Map();
+
+  function syncDateTimePickerStateFromForm(focusTarget = 'date') {
+    const selectedDate = document.getElementById('task-date').value || plannedTaskDate || getTodayString();
+    const parsedDate = parseDateInputValue(selectedDate);
+
+    dateTimePickerState = {
+      selectedDate,
+      visibleMonth: new Date(parsedDate.getFullYear(), parsedDate.getMonth(), 1),
+      startTime: document.getElementById('start-time-display').textContent || getAdaptiveTaskTimeRange().start,
+      endTime: document.getElementById('end-time-display').textContent || getAdaptiveTaskTimeRange().end,
+      focusTarget
+    };
+  }
+
+  function ensureDateTimePickerTimeOrder(changedField = 'start') {
+    const startMinutes = timeStringToMinutes(dateTimePickerState.startTime);
+    const endMinutes = timeStringToMinutes(dateTimePickerState.endTime);
+
+    if (endMinutes > startMinutes) {
+      return;
+    }
+
+    if (changedField === 'start') {
+      dateTimePickerState.endTime = minutesToTimeString(startMinutes + TASK_DURATION_DEFAULT_MINUTES);
+      return;
+    }
+
+    dateTimePickerState.startTime = minutesToTimeString(Math.max(endMinutes - TASK_DURATION_DEFAULT_MINUTES, 0));
+  }
+
+  function applyDateTimePickerSelection() {
+    setTaskDateInput(dateTimePickerState.selectedDate);
+    setTaskTimeInputs(dateTimePickerState.startTime, dateTimePickerState.endTime);
+  }
 
   function buildWheelItems(values, formatter = (value) => value, repeatCount = 1) {
     const spacers = Array.from({ length: TIME_WHEEL_SPACERS }, () =>
@@ -156,7 +301,7 @@
 
     const items = Array.from({ length: repeatCount }, (_, repeatIndex) =>
       values.map((value, baseIndex) => {
-        const virtualIndex = repeatIndex * values.length + baseIndex;
+        const virtualIndex = (repeatIndex * values.length) + baseIndex;
         return `<div class="time-wheel-item" data-index="${virtualIndex}" data-base-index="${baseIndex}" data-value="${value}">${formatter(value)}</div>`;
       }).join('')
     ).join('');
@@ -187,17 +332,8 @@
   }
 
   function getWheelMiddleIndex(wheel, index = 0) {
-    return Math.floor(getWheelRepeatCount(wheel) / 2) * getWheelBaseCount(wheel)
+    return (Math.floor(getWheelRepeatCount(wheel) / 2) * getWheelBaseCount(wheel))
       + getWrappedWheelIndex(wheel, index);
-  }
-
-  function getSelectedWheelIndex(wheel) {
-    const currentIndex = Number(wheel.dataset.selectedIndex);
-    if (Number.isFinite(currentIndex)) {
-      return getClampedWheelIndex(wheel, currentIndex);
-    }
-
-    return getWheelMiddleIndex(wheel);
   }
 
   function getSelectedWheelBaseIndex(wheel) {
@@ -206,18 +342,16 @@
       return getWrappedWheelIndex(wheel, currentIndex);
     }
 
-    return getWrappedWheelIndex(wheel, getSelectedWheelIndex(wheel));
+    return 0;
   }
 
   function setSelectedValueFromItem(wheelId, item) {
     if (!item) return;
 
-    if (wheelId === 'hour-wheel') {
+    if (wheelId === 'picker-hour-wheel') {
       selectedHour = parseInt(item.dataset.value, 10);
-    } else if (wheelId === 'minute-wheel') {
+    } else if (wheelId === 'picker-minute-wheel') {
       selectedMinute = parseInt(item.dataset.value, 10);
-    } else if (wheelId === 'period-wheel') {
-      selectedPeriod = item.dataset.value;
     }
   }
 
@@ -303,69 +437,6 @@
     });
   }
 
-  function normalizeSelectedHourForFormat() {
-    if (timeFormat === '12') {
-      if (selectedHour < 1 || selectedHour > 12) {
-        const normalized = ((selectedHour % 12) + 12) % 12;
-        selectedHour = normalized === 0 ? 12 : normalized;
-      }
-    } else if (selectedHour < 0 || selectedHour > 23) {
-      selectedHour = ((selectedHour % 24) + 24) % 24;
-    }
-  }
-
-  function convertTimeFormat(nextFormat) {
-    if (timeFormat === nextFormat) return;
-
-    if (nextFormat === '24') {
-      let hour24 = selectedHour % 12;
-      if (selectedPeriod === 'PM') hour24 += 12;
-      if (selectedPeriod === 'AM' && selectedHour === 12) hour24 = 0;
-      selectedHour = hour24;
-    } else {
-      selectedPeriod = selectedHour >= 12 ? 'PM' : 'AM';
-      selectedHour = selectedHour === 0 ? 12 : selectedHour > 12 ? selectedHour - 12 : selectedHour;
-    }
-
-    timeFormat = nextFormat;
-    normalizeSelectedHourForFormat();
-  }
-
-  function initTimePicker() {
-    const hourWheel = document.getElementById('hour-wheel');
-    const minuteWheel = document.getElementById('minute-wheel');
-    const periodWheel = document.getElementById('period-wheel');
-
-    // Generate hours
-    const hours = timeFormat === '12' ? Array.from({length: 12}, (_, i) => i + 1) : Array.from({length: 24}, (_, i) => i);
-    renderWheel(hourWheel, hours, (h) => String(h).padStart(2, '0'));
-
-    // Generate minutes (full 0-59 range)
-    const minutes = Array.from({length: 60}, (_, i) => i);
-    renderWheel(minuteWheel, minutes, (m) => String(m).padStart(2, '0'));
-
-    // Generate period (AM/PM) for 12-hour format
-    if (timeFormat === '12') {
-      periodWheel.style.display = 'block';
-      renderWheel(periodWheel, ['AM', 'PM']);
-    } else {
-      periodWheel.style.display = 'none';
-      periodWheel.innerHTML = '';
-      delete periodWheel.dataset.baseCount;
-      delete periodWheel.dataset.repeatCount;
-      delete periodWheel.dataset.selectedIndex;
-      delete periodWheel.dataset.selectedBaseIndex;
-    }
-
-    [hourWheel, minuteWheel, periodWheel].forEach(attachWheelInteractions);
-
-    requestAnimationFrame(() => {
-      scrollToValue(hourWheel, selectedHour, 'auto');
-      scrollToValue(minuteWheel, selectedMinute, 'auto');
-      if (timeFormat === '12') scrollToValue(periodWheel, selectedPeriod, 'auto');
-    });
-  }
-
   function scrollToValue(wheel, value, behavior = 'smooth') {
     const items = getWheelItems(wheel);
     const targetIndex = items.findIndex(item => item.dataset.value == value);
@@ -378,8 +449,28 @@
     }
   }
 
+  function updateDateTimePickerTimeTargets() {
+    document.getElementById('picker-start-preview').textContent = dateTimePickerState.startTime;
+    document.getElementById('picker-end-preview').textContent = dateTimePickerState.endTime;
+    document.getElementById('picker-start-target').classList.toggle('active', currentTimeTarget === 'start');
+    document.getElementById('picker-end-target').classList.toggle('active', currentTimeTarget === 'end');
+  }
+
+  function syncCurrentPickerTimeFromWheelSelection() {
+    const nextTime = formatTimeString(selectedHour, selectedMinute);
+    if (currentTimeTarget === 'start') {
+      dateTimePickerState.startTime = nextTime;
+    } else {
+      dateTimePickerState.endTime = nextTime;
+    }
+
+    ensureDateTimePickerTimeOrder(currentTimeTarget);
+    applyDateTimePickerSelection();
+    updateDateTimePickerTimeTargets();
+  }
+
   function updateSelectedItems(wheel, forcedIndex = null) {
-    if (!wheel || wheel.style.display === 'none') return;
+    if (!wheel) return;
 
     const items = getWheelItems(wheel);
     if (!items.length) return;
@@ -401,95 +492,132 @@
     });
 
     setSelectedValueFromItem(wheel.id, items[selectedIndex]);
+    syncCurrentPickerTimeFromWheelSelection();
   }
 
-  function openTimePicker(target) {
+  function loadWheelSelectionFromTarget(target = currentTimeTarget) {
     currentTimeTarget = target;
-    const modal = document.getElementById('time-picker-modal');
-    const title = document.getElementById('time-picker-title');
-    
-    title.textContent = target === 'start' ? 'Start Time' : 'End Time';
-    
-    // Parse current time
-    const currentTime = target === 'start' 
-      ? document.getElementById('start-time-display').textContent 
-      : document.getElementById('end-time-display').textContent;
-    
-    const [hourStr, minuteStr] = currentTime.split(':');
-    let hour = parseInt(hourStr);
-    const minute = parseInt(minuteStr);
-    
-    if (timeFormat === '12') {
-      selectedPeriod = hour >= 12 ? 'PM' : 'AM';
-      selectedHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
-    } else {
-      selectedHour = hour;
-    }
-    selectedMinute = Math.min(Math.max(minute, 0), 59);
-    
-    modal.classList.add('show');
-    initTimePicker();
+    const sourceTime = currentTimeTarget === 'start'
+      ? dateTimePickerState.startTime
+      : dateTimePickerState.endTime;
+    const { hours, minutes } = parseTimeString(sourceTime);
+    selectedHour = hours;
+    selectedMinute = minutes;
+    updateDateTimePickerTimeTargets();
   }
 
-  function closeTimePicker(save) {
-    const modal = document.getElementById('time-picker-modal');
+  function renderTimeWheels() {
+    const hourWheel = document.getElementById('picker-hour-wheel');
+    const minuteWheel = document.getElementById('picker-minute-wheel');
 
-    timeWheelSnapTimers.forEach(timer => clearTimeout(timer));
-    timeWheelSnapTimers.clear();
-    
-    if (save) {
-      let hour = selectedHour;
-      const minute = selectedMinute;
+    renderWheel(hourWheel, Array.from({ length: 24 }, (_, index) => index), (hour) => padTimePart(hour));
+    renderWheel(minuteWheel, Array.from({ length: 60 }, (_, index) => index), (minute) => padTimePart(minute));
+    [hourWheel, minuteWheel].forEach(attachWheelInteractions);
 
-      if (timeFormat === '12') {
-        if (selectedPeriod === 'PM' && hour !== 12) hour += 12;
-        if (selectedPeriod === 'AM' && hour === 12) hour = 0;
-      }
-
-      const timeStr = `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
-
-      if (currentTimeTarget === 'start') {
-        document.getElementById('start-time-display').textContent = timeStr;
-      } else {
-        document.getElementById('end-time-display').textContent = timeStr;
-      }
-    }
-    
-    modal.classList.remove('show');
-  }
-
-  // Time picker event listeners
-  document.getElementById('task-date-trigger').addEventListener('click', () => {
-    const dateInput = document.getElementById('task-date');
-    if (typeof dateInput.showPicker === 'function') {
-      dateInput.showPicker();
-    } else {
-      dateInput.focus();
-      dateInput.click();
-    }
-  });
-  document.getElementById('task-date').addEventListener('change', (event) => {
-    setTaskDateInput(event.target.value || getTodayString());
-  });
-  document.getElementById('start-time-trigger').addEventListener('click', () => openTimePicker('start'));
-  document.getElementById('end-time-trigger').addEventListener('click', () => openTimePicker('end'));
-  document.getElementById('time-picker-cancel').addEventListener('click', () => closeTimePicker(false));
-  document.getElementById('time-picker-confirm').addEventListener('click', () => closeTimePicker(true));
-  
-    // Format toggle
-  document.querySelectorAll('.format-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.querySelectorAll('.format-btn').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      convertTimeFormat(btn.dataset.format);
-      initTimePicker();
+    requestAnimationFrame(() => {
+      scrollToValue(hourWheel, selectedHour, 'auto');
+      scrollToValue(minuteWheel, selectedMinute, 'auto');
+      hourWheel.focus();
     });
+  }
+
+  function renderDateTimePicker() {
+    const currentMonthLabel = document.getElementById('calendar-current-month');
+    const calendarGrid = document.getElementById('calendar-grid');
+    const visibleMonth = dateTimePickerState.visibleMonth || parseDateInputValue(dateTimePickerState.selectedDate);
+    const monthStart = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+    const gridStart = new Date(monthStart);
+    gridStart.setDate(monthStart.getDate() - monthStart.getDay());
+    const today = getTodayString();
+
+    currentMonthLabel.textContent = monthStart.toLocaleDateString('en-US', {
+      month: 'long',
+      year: 'numeric'
+    });
+
+    const days = [];
+    for (let index = 0; index < 42; index += 1) {
+      const day = new Date(gridStart);
+      day.setDate(gridStart.getDate() + index);
+      const dayValue = formatDateInputValue(day);
+      const classes = ['calendar-day'];
+
+      if (day.getMonth() !== monthStart.getMonth()) classes.push('outside');
+      if (dayValue === today) classes.push('today');
+      if (dayValue === dateTimePickerState.selectedDate) classes.push('selected');
+
+      days.push(
+        `<button type="button" class="${classes.join(' ')}" data-date="${dayValue}">${day.getDate()}</button>`
+      );
+    }
+
+    calendarGrid.innerHTML = days.join('');
+    updateDateTimePickerTimeTargets();
+  }
+
+  function openDateTimePicker(focusTarget = 'date') {
+    syncDateTimePickerStateFromForm(focusTarget);
+    loadWheelSelectionFromTarget(focusTarget === 'end' ? 'end' : 'start');
+    renderDateTimePicker();
+    renderTimeWheels();
+    document.getElementById('datetime-picker-modal').classList.add('show');
+
+    requestAnimationFrame(() => {
+      if (focusTarget === 'date') {
+        document.getElementById('calendar-grid').querySelector('.calendar-day.selected')?.focus();
+      } else {
+        document.getElementById('picker-hour-wheel').focus();
+      }
+    });
+  }
+
+  function closeDateTimePicker() {
+    document.getElementById('datetime-picker-modal').classList.remove('show');
+  }
+
+  function shiftVisibleCalendarMonth(offset) {
+    const month = dateTimePickerState.visibleMonth || parseDateInputValue(dateTimePickerState.selectedDate);
+    dateTimePickerState.visibleMonth = new Date(month.getFullYear(), month.getMonth() + offset, 1);
+    renderDateTimePicker();
+  }
+
+  document.getElementById('task-date-trigger').addEventListener('click', () => openDateTimePicker('date'));
+  document.getElementById('start-time-trigger').addEventListener('click', () => openDateTimePicker('start'));
+  document.getElementById('end-time-trigger').addEventListener('click', () => openDateTimePicker('end'));
+
+  document.getElementById('calendar-prev').addEventListener('click', () => shiftVisibleCalendarMonth(-1));
+  document.getElementById('calendar-next').addEventListener('click', () => shiftVisibleCalendarMonth(1));
+
+  document.getElementById('calendar-grid').addEventListener('click', (event) => {
+    const dayButton = event.target.closest('.calendar-day');
+    if (!dayButton) return;
+
+    dateTimePickerState.selectedDate = dayButton.dataset.date;
+    const selectedDate = parseDateInputValue(dayButton.dataset.date);
+    dateTimePickerState.visibleMonth = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1);
+    applyDateTimePickerSelection();
+    renderDateTimePicker();
   });
 
-  // Close modal on background click
-  document.getElementById('time-picker-modal').addEventListener('click', (e) => {
-    if (e.target.id === 'time-picker-modal') {
-      closeTimePicker(false);
+  document.getElementById('picker-start-target').addEventListener('click', () => {
+    loadWheelSelectionFromTarget('start');
+    renderTimeWheels();
+  });
+
+  document.getElementById('picker-end-target').addEventListener('click', () => {
+    loadWheelSelectionFromTarget('end');
+    renderTimeWheels();
+  });
+
+  document.getElementById('datetime-picker-modal').addEventListener('click', (event) => {
+    if (event.target.id === 'datetime-picker-modal') {
+      closeDateTimePicker();
+    }
+  });
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && document.getElementById('datetime-picker-modal').classList.contains('show')) {
+      closeDateTimePicker();
     }
   });
 
@@ -666,8 +794,7 @@
 
     // Reset form
     document.getElementById('new-name').value  = '';
-    document.getElementById('start-time-display').textContent = '09:00';
-    document.getElementById('end-time-display').textContent = '10:00';
+    applyAdaptiveTaskTimeDefaults();
     document.getElementById('task-recurring').value = 'none';
     setTaskDateInput(plannedTaskDate || getTodayString());
   });
@@ -682,15 +809,22 @@
 
   // ── Save all ───────────────────────────────────────────────────────────────
   async function saveAll() {
-    const breakInterval = parseInt(document.getElementById('break-interval').value, 10) || 45;
+    const breakIntervals = {
+      water: clampBreakIntervalValue(document.getElementById('break-interval-water').value, BREAK_INTERVAL_DEFAULTS.water),
+      stretch: clampBreakIntervalValue(document.getElementById('break-interval-stretch').value, BREAK_INTERVAL_DEFAULTS.stretch),
+      eyes: clampBreakIntervalValue(document.getElementById('break-interval-eyes').value, BREAK_INTERVAL_DEFAULTS.eyes)
+    };
     const notificationSound = normalizeNotificationSound(document.getElementById('notification-sound').value);
     const appTheme = window.FocusPalTheme?.normalizeSettings(getThemeSettingsFromControls()) || { preset: 'focuspal' };
 
     await window.fp.set('tasks', tasks);
-    await window.fp.set('breakInterval', breakInterval);
+    await window.fp.set('breakInterval', breakIntervals.water);
+    await window.fp.set('breakWaterInterval', breakIntervals.water);
+    await window.fp.set('breakStretchInterval', breakIntervals.stretch);
+    await window.fp.set('breakEyesInterval', breakIntervals.eyes);
     await window.fp.set('notificationSound', notificationSound);
     await window.fp.set('appTheme', appTheme);
-    setBreakIntervalInput(breakInterval);
+    setBreakIntervalInputs(breakIntervals);
     setNotificationSoundInput(notificationSound);
     window.FocusPalTheme?.applyTheme(appTheme);
     await window.fp.set('breakWater',   document.getElementById('toggle-water').checked);
@@ -742,6 +876,9 @@
     tasks = (await window.fp.get('tasks')) || [];
     const [
       interval,
+      waterInterval,
+      stretchInterval,
+      eyesInterval,
       legacyBreakMessage,
       waterMsg,
       stretchMsg,
@@ -757,6 +894,9 @@
       appTheme
     ] = await Promise.all([
       window.fp.get('breakInterval'),
+      window.fp.get('breakWaterInterval'),
+      window.fp.get('breakStretchInterval'),
+      window.fp.get('breakEyesInterval'),
       window.fp.get('breakMessage'),
       window.fp.get('breakWaterMessage'),
       window.fp.get('breakStretchMessage'),
@@ -773,7 +913,12 @@
     ]);
 
     setTaskDateInput(plannedTaskDate || getTodayString());
-    setBreakIntervalInput(interval ?? 45);
+    applyAdaptiveTaskTimeDefaults();
+    setBreakIntervalInputs({
+      water: clampBreakIntervalValue(waterInterval ?? interval, BREAK_INTERVAL_DEFAULTS.water),
+      stretch: clampBreakIntervalValue(stretchInterval ?? interval, BREAK_INTERVAL_DEFAULTS.stretch),
+      eyes: clampBreakIntervalValue(eyesInterval ?? interval, BREAK_INTERVAL_DEFAULTS.eyes)
+    });
     setNotificationSoundInput(notificationSound);
     setThemeControlValues(appTheme);
     document.getElementById('break-message-water').value = waterMsg || legacyBreakMessage || '';
@@ -806,6 +951,8 @@
   }
 
   populateThemePresetOptions();
+  setTaskDateInput(plannedTaskDate || getTodayString());
+  applyAdaptiveTaskTimeDefaults();
   window.fp.onLookupSettingUpdated((data) => {
     document.getElementById('toggle-word-lookup').checked = data?.enabled !== false;
   });

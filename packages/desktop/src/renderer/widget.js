@@ -17,9 +17,11 @@
   let allTasks = [];
   let tasks = [];
   let taskHistoryEntries = [];
-  let breakIntervalMin = 45;
+  const BREAK_INTERVAL_DEFAULTS = { water: 45, stretch: 60, eyes: 20 };
+  let breakIntervalsMin = { ...BREAK_INTERVAL_DEFAULTS };
   let breakTimer = null;
-  let breakDueAtMs = null;
+  let breakDueAtMs = { water: null, stretch: null, eyes: null };
+  let activeBreakKey = null;
   let lastBreakScheduleSignature = '';
   let clockInterval = null;
   let tickInterval = null;
@@ -736,17 +738,22 @@
     eyes: ''
   };
 
+  function getBreakIntervalMs(key) {
+    return Math.max(0, Number(breakIntervalsMin[key]) || 0) * 60 * 1000;
+  }
+
+  function getEnabledBreakKeys() {
+    return Object.keys(breakTypes).filter((key) => breakTypes[key] && getBreakIntervalMs(key) > 0);
+  }
+
   function getEnabledBreakCount() {
-    return [breakTypes.water, breakTypes.stretch, breakTypes.eyes].filter(Boolean).length;
+    return getEnabledBreakKeys().length;
   }
 
   function getBreakScheduleSignature() {
-    return [
-      String(breakIntervalMin || 0),
-      breakTypes.water ? '1' : '0',
-      breakTypes.stretch ? '1' : '0',
-      breakTypes.eyes ? '1' : '0'
-    ].join('|');
+    return ['water', 'stretch', 'eyes'].map((key) =>
+      `${key}:${breakTypes[key] ? '1' : '0'}:${Math.max(0, Number(breakIntervalsMin[key]) || 0)}`
+    ).join('|');
   }
 
   function isBreakReminderVisible() {
@@ -756,58 +763,93 @@
   function hideBreakReminder() {
     document.getElementById('break-bar').classList.remove('visible');
     document.getElementById('dot').classList.remove('break');
+    activeBreakKey = null;
   }
 
   function breaksMutedRightNow() {
     return focusModeActive && pomodoroSettings.muteBreaksInFocus;
   }
 
-  function scheduleBreak({ reset = false } = {}) {
+  function scheduleBreak({ reset = false, resetKeys = [] } = {}) {
     if (breakTimer) {
       clearTimeout(breakTimer);
       breakTimer = null;
     }
 
-    const intervalMs = Math.max(0, Number(breakIntervalMin) || 0) * 60 * 1000;
     const signature = getBreakScheduleSignature();
     const configChanged = signature !== lastBreakScheduleSignature;
     lastBreakScheduleSignature = signature;
+    const enabledKeys = getEnabledBreakKeys();
 
-    if (!intervalMs || getEnabledBreakCount() === 0) {
-      breakDueAtMs = null;
+    if (getEnabledBreakCount() === 0) {
+      breakDueAtMs = { water: null, stretch: null, eyes: null };
+      activeBreakKey = null;
       return;
     }
+
+    const now = Date.now();
+    ['water', 'stretch', 'eyes'].forEach((key) => {
+      const intervalMs = getBreakIntervalMs(key);
+      if (!breakTypes[key] || !intervalMs) {
+        breakDueAtMs[key] = null;
+        return;
+      }
+
+      if (reset || configChanged || resetKeys.includes(key) || !breakDueAtMs[key]) {
+        breakDueAtMs[key] = now + intervalMs;
+      }
+    });
 
     if (breaksMutedRightNow()) return;
     if (isBreakReminderVisible()) return;
 
-    if (reset || configChanged || !breakDueAtMs) {
-      breakDueAtMs = Date.now() + intervalMs;
+    const nextBreakKey = enabledKeys
+      .filter((key) => breakDueAtMs[key])
+      .sort((a, b) => breakDueAtMs[a] - breakDueAtMs[b])[0];
+
+    if (!nextBreakKey) {
+      return;
     }
 
     breakTimer = setTimeout(() => {
       breakTimer = null;
-      breakDueAtMs = null;
-      showBreak();
-    }, Math.max(250, breakDueAtMs - Date.now()));
+      const dueBreaks = getEnabledBreakKeys()
+        .filter((key) => breakDueAtMs[key] && breakDueAtMs[key] <= Date.now() + 250)
+        .sort((a, b) => breakDueAtMs[a] - breakDueAtMs[b]);
+
+      if (!dueBreaks.length) {
+        scheduleBreak();
+        return;
+      }
+
+      showBreak(dueBreaks[0]);
+    }, Math.max(250, breakDueAtMs[nextBreakKey] - now));
   }
 
-  function showBreak() {
+  function showBreak(key) {
     if (breaksMutedRightNow()) {
       return;
     }
 
-    const enabledBreaks = [
-      breakTypes.water ? { key: 'water', icon: '💧', text: breakMessages.water || 'Time for a water break!' } : null,
-      breakTypes.stretch ? { key: 'stretch', icon: '🧘', text: breakMessages.stretch || 'Time to stretch and move around!' } : null,
-      breakTypes.eyes ? { key: 'eyes', icon: '👁️', text: breakMessages.eyes || 'Eye rest: look 20ft away for 20 seconds' } : null
-    ].filter(Boolean);
+    const breakLookup = {
+      water: { key: 'water', icon: '💧', text: breakMessages.water || 'Time for a water break!' },
+      stretch: { key: 'stretch', icon: '🧘', text: breakMessages.stretch || 'Time to stretch and move around!' },
+      eyes: { key: 'eyes', icon: '👁️', text: breakMessages.eyes || 'Eye rest: look 20ft away for 20 seconds' }
+    };
+    const selectedBreak = breakLookup[key];
 
-    if (enabledBreaks.length === 0) {
+    if (!selectedBreak || !breakTypes[key]) {
       return;
     }
 
-    const selectedBreak = enabledBreaks[Math.floor(Math.random() * enabledBreaks.length)];
+    const now = Date.now();
+    activeBreakKey = key;
+    getEnabledBreakKeys().forEach((breakKey) => {
+      if (breakKey !== key && breakDueAtMs[breakKey] && breakDueAtMs[breakKey] <= now) {
+        breakDueAtMs[breakKey] = now + getBreakIntervalMs(breakKey);
+      }
+    });
+
     const icon = selectedBreak.icon;
     const text = selectedBreak.text;
     
@@ -824,8 +866,9 @@
   }
 
   document.getElementById('break-dismiss').addEventListener('click', () => {
+    const resetKey = activeBreakKey;
     hideBreakReminder();
-    scheduleBreak({ reset: true }); // restart countdown
+    scheduleBreak({ resetKeys: resetKey ? [resetKey] : [] });
   });
 
   // ── Expand / collapse ──────────────────────────────────────────────────────
@@ -964,7 +1007,10 @@
     // Generate recurring task instances for today
     tasks = generateRecurringTasks(allTasks);
     
-    breakIntervalMin = (await window.fp.get('breakInterval'))   ?? 45;
+    const legacyBreakInterval = await window.fp.get('breakInterval');
+    breakIntervalsMin.water = (await window.fp.get('breakWaterInterval')) ?? legacyBreakInterval ?? BREAK_INTERVAL_DEFAULTS.water;
+    breakIntervalsMin.stretch = (await window.fp.get('breakStretchInterval')) ?? legacyBreakInterval ?? BREAK_INTERVAL_DEFAULTS.stretch;
+    breakIntervalsMin.eyes = (await window.fp.get('breakEyesInterval')) ?? legacyBreakInterval ?? BREAK_INTERVAL_DEFAULTS.eyes;
     breakTypes.water   = (await window.fp.get('breakWater'))    ?? true;
     breakTypes.stretch = (await window.fp.get('breakStretch')) ?? false;
     breakTypes.eyes    = (await window.fp.get('breakEyes'))    ?? false;
@@ -1480,7 +1526,7 @@
           clearTimeout(breakTimer);
           breakTimer = null;
         }
-        breakDueAtMs = null;
+        breakDueAtMs = { water: null, stretch: null, eyes: null };
         hideBreakReminder();
       }
     } else {

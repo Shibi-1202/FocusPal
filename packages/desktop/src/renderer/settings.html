@@ -237,22 +237,48 @@
       </div>
 
       <div class="section">
-        <div class="section-label">Interval</div>
-        <div class="field">
-          <label>Remind me every (minutes)</label>
-          <input type="number" id="break-interval" min="5" max="180" placeholder="45"/>
+        <div class="section-label">Intervals & Messages</div>
+        <div class="break-setting-card">
+          <div class="break-setting-header">
+            <div class="break-setting-title">Water break</div>
+            <div class="break-setting-copy">Use a separate cadence for hydration reminders.</div>
+          </div>
+          <div class="field">
+            <label>Remind me every (minutes)</label>
+            <input type="number" id="break-interval-water" min="5" max="180" placeholder="45"/>
+          </div>
+          <div class="field">
+            <label>Message</label>
+            <input type="text" id="break-message-water" placeholder="Time for a water break!"/>
+          </div>
         </div>
-        <div class="field">
-          <label>Water break message</label>
-          <input type="text" id="break-message-water" placeholder="Time for a water break!"/>
+        <div class="break-setting-card">
+          <div class="break-setting-header">
+            <div class="break-setting-title">Stretch reminder</div>
+            <div class="break-setting-copy">Set how often you want movement reminders.</div>
+          </div>
+          <div class="field">
+            <label>Remind me every (minutes)</label>
+            <input type="number" id="break-interval-stretch" min="5" max="180" placeholder="60"/>
+          </div>
+          <div class="field">
+            <label>Message</label>
+            <input type="text" id="break-message-stretch" placeholder="Time to stretch and move around!"/>
+          </div>
         </div>
-        <div class="field">
-          <label>Stretch break message</label>
-          <input type="text" id="break-message-stretch" placeholder="Time to stretch and move around!"/>
-        </div>
-        <div class="field">
-          <label>Eye rest message</label>
-          <input type="text" id="break-message-eyes" placeholder="Eye rest: look 20ft away for 20 seconds"/>
+        <div class="break-setting-card">
+          <div class="break-setting-header">
+            <div class="break-setting-title">Eye rest</div>
+            <div class="break-setting-copy">Keep the 20-20-20 reminder on its own schedule.</div>
+          </div>
+          <div class="field">
+            <label>Remind me every (minutes)</label>
+            <input type="number" id="break-interval-eyes" min="5" max="180" placeholder="20"/>
+          </div>
+          <div class="field">
+            <label>Message</label>
+            <input type="text" id="break-message-eyes" placeholder="Eye rest: look 20ft away for 20 seconds"/>
+          </div>
         </div>
       </div>
     </div>
@@ -415,24 +441,40 @@
 
 <div class="toast" id="toast">Saved!</div>
 
-<!-- Time picker modal -->
-<div class="time-picker-modal" id="time-picker-modal">
-  <div class="time-picker-content">
-    <div class="time-picker-header">
-      <h3 id="time-picker-title">Select Time</h3>
-      <div class="time-picker-format">
-        <button class="format-btn active" data-format="12">12H</button>
-        <button class="format-btn" data-format="24">24H</button>
+<!-- Date and time picker modal -->
+<div class="datetime-picker-modal" id="datetime-picker-modal">
+  <div class="datetime-picker-card">
+    <div class="calendar-nav">
+      <button type="button" class="calendar-nav-btn" id="calendar-prev" aria-label="Previous month">‹</button>
+      <div class="calendar-current-month" id="calendar-current-month">April 2026</div>
+      <button type="button" class="calendar-nav-btn" id="calendar-next" aria-label="Next month">›</button>
+    </div>
+    <div class="calendar-weekdays">
+      <span>Su</span>
+      <span>Mo</span>
+      <span>Tu</span>
+      <span>We</span>
+      <span>Th</span>
+      <span>Fr</span>
+      <span>Sa</span>
+    </div>
+    <div class="calendar-grid" id="calendar-grid"></div>
+    <div class="datetime-picker-divider"></div>
+    <div class="datetime-picker-times">
+      <div class="picker-time-targets">
+        <button type="button" class="picker-time-target active" id="picker-start-target" data-target="start">
+          <span class="picker-time-target-label">Start Time</span>
+          <span class="picker-time-target-value" id="picker-start-preview">09:00</span>
+        </button>
+        <button type="button" class="picker-time-target" id="picker-end-target" data-target="end">
+          <span class="picker-time-target-label">End Time</span>
+          <span class="picker-time-target-value" id="picker-end-preview">10:00</span>
+        </button>
       </div>
-    </div>
-    <div class="time-picker-wheels">
-      <div class="time-wheel" id="hour-wheel"></div>
-      <div class="time-wheel" id="minute-wheel"></div>
-      <div class="time-wheel" id="period-wheel"></div>
-    </div>
-    <div class="time-picker-actions">
-      <button class="btn-cancel" id="time-picker-cancel">Cancel</button>
-      <button class="btn-confirm" id="time-picker-confirm">Confirm</button>
+      <div class="time-picker-wheels datetime-wheel-set">
+        <div class="time-wheel" id="picker-hour-wheel"></div>
+        <div class="time-wheel" id="picker-minute-wheel"></div>
+      </div>
     </div>
   </div>
 </div>
