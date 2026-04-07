@@ -13,10 +13,10 @@
     "start": "electron . --no-sandbox",
     "dev": "electron . --dev --no-sandbox",
     "test": "node --test src/common/dateUtils.test.js src/common/rendererUtils.test.js src/common/taskUtils.test.js",
-    "build": "electron-builder",
-    "build-linux": "electron-builder --linux",
-    "build-win": "electron-builder --win",
-    "build-all": "electron-builder --linux --win"
+    "build": "electron-builder --config electron-builder.yml",
+    "build-linux": "electron-builder --config electron-builder.yml --linux",
+    "build-win": "electron-builder --config electron-builder.yml --win",
+    "build-all": "electron-builder --config electron-builder.yml --linux --win"
   },
   "dependencies": {
     "electron-store": "^8.1.0"
@@ -24,40 +24,5 @@
   "devDependencies": {
     "electron": "^28.0.0",
     "electron-builder": "^26.0.12"
-  },
-  "build": {
-    "appId": "com.focuspal.app",
-    "productName": "FocusPal",
-    "toolsets": {
-      "winCodeSign": "1.1.0"
-    },
-    "directories": {
-      "output": "dist"
-    },
-    "linux": {
-      "target": ["AppImage", "deb"],
-      "category": "Utility",
-      "maintainer": "FocusPal Team <support@focuspal.com>",
-      "executableName": "focuspal",
-      "icon": "assets/icon.png"
-    },
-    "win": {
-      "target": ["nsis", "portable"],
-      "icon": "assets/icon.ico"
-    },
-    "deb": {
-      "packageName": "focuspal"
-    },
-    "files": [
-      "src/**/*",
-      "assets/**/*"
-    ],
-    "extraResources": [
-      {
-        "from": "config/supabase.json",
-        "to": "config/supabase.json"
-      }
-    ],
-    "artifactName": "${productName}-${version}.${ext}"
   }
 }
