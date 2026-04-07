@@ -15,11 +15,13 @@
     const welcomeText = document.getElementById('welcomeText');
     const modeToggleText = document.getElementById('modeToggleText');
     const modeToggleLink = document.getElementById('modeToggleLink');
+    const googleAuthBtn = document.getElementById('btn-google-auth');
     const passwordToggle = document.getElementById('passwordToggle');
     const forgotPassword = document.getElementById('forgotPassword');
     const passwordStrength = document.getElementById('passwordStrength');
     const strengthFill = document.getElementById('strengthFill');
     const strengthText = document.getElementById('strengthText');
+    let activeAuthMethod = 'password';
 
     // Auto-focus email on load
     window.addEventListener('DOMContentLoaded', () => {
@@ -74,6 +76,7 @@
 
     function toggleMode() {
       isLoginMode = !isLoginMode;
+      document.body.classList.toggle('signup-mode', !isLoginMode);
       
       if (isLoginMode) {
         // Switch to login mode
@@ -99,6 +102,10 @@
       // Clear form and errors
       clearError();
       form.reset();
+      passwordStrength.classList.remove('show');
+      strengthFill.className = 'strength-fill';
+      strengthText.className = 'strength-text';
+      strengthText.textContent = 'Enter a password';
       emailInput.focus();
     }
 
@@ -135,6 +142,7 @@
       clearError();
       
       // Show loading state
+      activeAuthMethod = 'password';
       setLoading(true);
       
       try {
@@ -178,7 +186,14 @@
       isLoading = loading;
       submitBtn.disabled = loading;
       submitBtn.classList.toggle('loading', loading);
+      googleAuthBtn.disabled = loading;
       
+      if (activeAuthMethod === 'google') {
+        googleAuthBtn.textContent = loading ? 'Opening Google...' : 'Continue with Google';
+        submitText.textContent = isLoginMode ? 'Sign In' : 'Create Account';
+        return;
+      }
+
       if (loading) {
         submitText.textContent = isLoginMode ? 'Signing in...' : 'Creating account...';
       } else {
@@ -241,6 +256,30 @@
           clearError();
         }
       });
+    });
+
+    googleAuthBtn.addEventListener('click', async () => {
+      if (isLoading) return;
+
+      clearError();
+      activeAuthMethod = 'google';
+      setLoading(true);
+
+      try {
+        const result = await window.fp.auth.loginWithGoogle();
+        if (result.success) {
+          const userName = result.user?.displayName || result.user?.name || 'there';
+          showSuccess(`Welcome to FocusPal, ${userName}!`);
+        } else {
+          showError(result.error || 'Google sign-in failed. Please try again.');
+        }
+      } catch (error) {
+        console.error('Google auth error:', error);
+        showError(error.message || 'Google sign-in failed. Please try again.');
+      } finally {
+        activeAuthMethod = 'password';
+        setLoading(false);
+      }
     });
 
     // Window controls

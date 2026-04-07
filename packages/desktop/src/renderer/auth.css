@@ -62,18 +62,35 @@
       align-items: center;
       justify-content: center;
       overflow-y: auto;
+      min-height: 0;
+      padding: 24px 0;
+      scrollbar-width: none;
+      -ms-overflow-style: none;
+    }
+
+    .auth-wrapper::-webkit-scrollbar {
+      width: 0;
+      height: 0;
     }
 
     .auth-container {
       width: 100%;
       max-width: 360px;
-      padding: 40px 32px;
+      margin: auto;
+      padding: 28px 32px;
       text-align: center;
     }
 
     .logo {
-      font-size: 48px;
-      margin-bottom: 8px;
+      display: flex;
+      justify-content: center;
+      margin-bottom: 10px;
+    }
+
+    .logo-mark {
+      width: 72px;
+      height: 72px;
+      display: block;
     }
 
     .app-name {
@@ -86,12 +103,12 @@
     .welcome-text {
       font-size: 16px;
       color: var(--text-secondary);
-      margin-bottom: 32px;
+      margin-bottom: 24px;
       transition: opacity 0.3s ease;
     }
 
     .form-group {
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       text-align: left;
     }
 
@@ -153,7 +170,7 @@
       border: 1px solid var(--error);
       border-radius: 8px;
       padding: 12px 16px;
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       font-size: 14px;
       color: var(--error);
       text-align: left;
@@ -227,7 +244,7 @@
 
     .forgot-password {
       display: block;
-      margin-top: 16px;
+      margin-top: 14px;
       font-size: 14px;
       color: var(--primary-blue);
       text-decoration: none;
@@ -241,7 +258,7 @@
     .divider {
       display: flex;
       align-items: center;
-      margin: 24px 0;
+      margin: 18px 0;
       color: var(--text-muted);
       font-size: 14px;
     }
@@ -263,13 +280,12 @@
     }
 
     .oauth-buttons {
-      display: flex;
-      gap: 12px;
-      margin-bottom: 24px;
+      display: grid;
+      grid-template-columns: 1fr;
+      margin-bottom: 18px;
     }
 
     .oauth-btn {
-      flex: 1;
       padding: 12px;
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
@@ -278,8 +294,8 @@
       font-size: 14px;
       cursor: pointer;
       transition: all 0.2s ease;
-      opacity: 0.5;
-      pointer-events: none;
+      opacity: 1;
+      pointer-events: auto;
     }
 
     .oauth-btn:hover {
@@ -287,9 +303,45 @@
       border-color: var(--border-hover);
     }
 
+    .oauth-btn.google {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .oauth-btn:disabled {
+      opacity: 0.6;
+      cursor: progress;
+    }
+
     .mode-toggle {
       font-size: 14px;
       color: var(--text-secondary);
+    }
+
+    body.signup-mode .auth-container {
+      padding-top: 22px;
+      padding-bottom: 22px;
+    }
+
+    body.signup-mode .logo-mark {
+      width: 64px;
+      height: 64px;
+    }
+
+    body.signup-mode .welcome-text {
+      margin-bottom: 18px;
+    }
+
+    body.signup-mode .form-group {
+      margin-bottom: 14px;
+    }
+
+    body.signup-mode .divider {
+      margin: 14px 0;
+    }
+
+    body.signup-mode .oauth-buttons {
+      margin-bottom: 14px;
     }
 
     .mode-toggle a {
@@ -320,7 +372,7 @@
 
     .password-strength {
       display: none;
-      margin-top: 8px;
+      margin-top: 6px;
       font-size: 12px;
     }
 
@@ -365,3 +417,120 @@
     .strength-text.weak { color: var(--error); }
     .strength-text.medium { color: var(--warning); }
     .strength-text.strong { color: var(--success); }
+
+    @media (max-height: 720px) {
+      .auth-wrapper {
+        padding: 16px 0;
+      }
+
+      .auth-container {
+        padding: 22px 28px;
+      }
+
+      .logo-mark {
+        width: 64px;
+        height: 64px;
+      }
+
+      .app-name {
+        font-size: 22px;
+        margin-bottom: 6px;
+      }
+
+      .welcome-text {
+        font-size: 15px;
+        margin-bottom: 18px;
+      }
+
+      .form-group {
+        margin-bottom: 14px;
+      }
+
+      .form-group label {
+        margin-bottom: 6px;
+      }
+
+      .form-group input {
+        padding: 10px 14px;
+      }
+
+      .submit-btn {
+        padding: 12px 20px;
+        font-size: 15px;
+      }
+
+      .forgot-password {
+        margin-top: 12px;
+      }
+
+      .divider {
+        margin: 14px 0;
+      }
+
+      .oauth-buttons {
+        margin-bottom: 14px;
+      }
+
+      .mode-toggle {
+        font-size: 13px;
+      }
+
+      body.signup-mode .auth-container {
+        padding-top: 18px;
+        padding-bottom: 18px;
+      }
+    }
+
+    @media (max-height: 660px) {
+      .auth-wrapper {
+        padding: 10px 0;
+      }
+
+      .auth-container {
+        padding: 16px 20px;
+      }
+
+      .logo {
+        margin-bottom: 8px;
+      }
+
+      .logo-mark {
+        width: 56px;
+        height: 56px;
+      }
+
+      .app-name {
+        font-size: 20px;
+      }
+
+      .welcome-text {
+        font-size: 14px;
+        margin-bottom: 14px;
+      }
+
+      .form-group {
+        margin-bottom: 12px;
+      }
+
+      .error-message {
+        padding: 10px 12px;
+        margin-bottom: 14px;
+        font-size: 13px;
+      }
+
+      .divider {
+        margin: 12px 0;
+      }
+
+      .oauth-btn {
+        padding: 10px;
+      }
+
+      .mode-toggle {
+        font-size: 12px;
+      }
+
+      .password-strength {
+        font-size: 11px;
+      }
+    }

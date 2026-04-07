@@ -1,4 +1,6 @@
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, globalShortcut, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, nativeImage, globalShortcut, dialog, shell } = require('electron');
+const crypto = require('crypto');
+const http = require('http');
 const path = require('path');
 const Store = require('electron-store');
 const FocusPalTheme = require('../common/appTheme');
@@ -25,6 +27,7 @@ let lookupAnchorCenter = null;
 let lookupCollapsedState = null;
 let cloudStateCache = null;
 let cloudStateUserId = null;
+let pendingGoogleAuthFlow = null;
 const USER_SCOPED_KEYS = new Set([
   'tasks',
   'taskHistory',
@@ -52,11 +55,21 @@ const WIDGET_DOT = { width: 48, height: 48 };
 const WIDGET_PILL = { width: 168, height: 48 };
 const WIDGET_EXPANDED  = { width: 400, height: 260 };
 const WIDGET_LOOKUP = { width: 480, height: 220 };
+const GOOGLE_AUTH_TIMEOUT_MS = 5 * 60 * 1000;
 const RENDERER_WEB_PREFERENCES = {
   nodeIntegration: false,
   contextIsolation: true,
   preload: path.join(__dirname, 'preload.js')
 };
+const RUNTIME_ASSET_DIR = path.join(__dirname, '../../assets');
+const WINDOW_ICON_PATH = path.join(
+  RUNTIME_ASSET_DIR,
+  process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+);
+const TRAY_ICON_PATH = path.join(
+  RUNTIME_ASSET_DIR,
+  process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+);
 
 function getBottomRightPos(w, h) {
   const { width: sw, height: sh } = screen.getPrimaryDisplay().workAreaSize;
@@ -78,11 +91,42 @@ function createRendererWindow(options) {
   const { webPreferences = {}, ...rest } = options;
   return new BrowserWindow({
     ...rest,
+    icon: rest.icon || WINDOW_ICON_PATH,
     webPreferences: {
       ...RENDERER_WEB_PREFERENCES,
       ...webPreferences
     }
   });
+}
+
+function createFallbackTrayIcon() {
+  return nativeImage.createFromDataURL(
+    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFJSURBVDiNpdM9S8NAGMDx/5Nc0kKhUBwEwUVwcRMcXPwAfgAHBxEHQXDRr+Dg4CI4iYOTk4uDgyAIQnFwEAQHBUGQYqFJm+Z6DqZN2qTW5x7u7vfcc/cS/lMopQghEEKglEIpBSEESimUUiilIIRAKYVSCqUUSikIIVBKQQiBUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKX4AXYVXKzFfX1yAAAAAElFTkSuQmCC'
+  );
+}
+
+function getTrayIcon() {
+  const icon = nativeImage.createFromPath(TRAY_ICON_PATH);
+  if (icon && !icon.isEmpty()) {
+    const size = process.platform === 'win32' ? 16 : 18;
+    return icon.resize({ width: size, height: size });
+  }
+
+  return createFallbackTrayIcon();
+}
+
+function destroyTray() {
+  if (!tray) {
+    return;
+  }
+
+  try {
+    tray.destroy();
+  } catch (err) {
+    console.error('Tray destroy error:', err);
+  } finally {
+    tray = null;
+  }
 }
 
 function clamp(value, min, max) {
@@ -192,6 +236,174 @@ function setWidgetBounds(size, position = null) {
 
 function getWindowFromSender(event) {
   return event?.sender ? BrowserWindow.fromWebContents(event.sender) : null;
+}
+
+function toBase64Url(value) {
+  return Buffer.from(value)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function createCodeVerifier() {
+  return toBase64Url(crypto.randomBytes(32));
+}
+
+function createCodeChallenge(verifier) {
+  return toBase64Url(crypto.createHash('sha256').update(verifier).digest());
+}
+
+function createOAuthResponsePage(title, message) {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${title}</title>
+  <style>
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: #0d1117;
+      color: #e6edf3;
+      font: 16px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      padding: 24px;
+    }
+    .card {
+      max-width: 480px;
+      width: 100%;
+      padding: 24px;
+      border-radius: 16px;
+      background: #161b22;
+      border: 1px solid rgba(240, 246, 252, 0.1);
+      box-shadow: 0 20px 48px rgba(0, 0, 0, 0.35);
+    }
+    h1 {
+      margin: 0 0 12px;
+      font-size: 22px;
+    }
+    p {
+      margin: 0;
+      color: #9da7b3;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>${title}</h1>
+    <p>${message}</p>
+  </div>
+</body>
+</html>`;
+}
+
+function closePendingGoogleAuthFlow(error = null) {
+  if (!pendingGoogleAuthFlow) {
+    return;
+  }
+
+  const { server, timeoutId, reject } = pendingGoogleAuthFlow;
+  pendingGoogleAuthFlow = null;
+
+  if (timeoutId) {
+    clearTimeout(timeoutId);
+  }
+
+  if (server) {
+    try {
+      server.close();
+    } catch (closeError) {
+      console.error('Google auth server close error:', closeError);
+    }
+  }
+
+  if (error) {
+    reject(error);
+  }
+}
+
+function waitForGoogleOAuthCallback(redirectURL) {
+  if (pendingGoogleAuthFlow) {
+    throw new Error('A Google sign-in attempt is already in progress.');
+  }
+
+  const callbackURL = new URL(redirectURL);
+  if (callbackURL.protocol !== 'http:') {
+    throw new Error('Google auth redirect URL must use http://127.0.0.1 or localhost.');
+  }
+
+  return new Promise((resolve, reject) => {
+    const server = http.createServer((req, res) => {
+      const requestURL = new URL(req.url || '/', `${callbackURL.protocol}//${req.headers.host || callbackURL.host}`);
+
+      if (requestURL.pathname !== callbackURL.pathname) {
+        res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('Not found');
+        return;
+      }
+
+      const code = requestURL.searchParams.get('code');
+      const error = requestURL.searchParams.get('error');
+      const errorDescription = requestURL.searchParams.get('error_description');
+
+      if (error) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(createOAuthResponsePage('Authentication Cancelled', 'Google sign-in did not complete. Return to FocusPal and try again.'));
+        closePendingGoogleAuthFlow(new Error(errorDescription || error));
+        return;
+      }
+
+      if (!code) {
+        res.writeHead(400, { 'Content-Type': 'text/html; charset=utf-8' });
+        res.end(createOAuthResponsePage('Authentication Failed', 'No authorization code was returned. Return to FocusPal and try again.'));
+        closePendingGoogleAuthFlow(new Error('Google sign-in failed because no authorization code was returned.'));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(createOAuthResponsePage('Authentication Complete', 'You can now return to FocusPal. This tab can be closed.'));
+
+      const activeFlow = pendingGoogleAuthFlow;
+      pendingGoogleAuthFlow = null;
+      if (activeFlow?.timeoutId) {
+        clearTimeout(activeFlow.timeoutId);
+      }
+      if (activeFlow?.server) {
+        try {
+          activeFlow.server.close();
+        } catch (closeError) {
+          console.error('Google auth server close error:', closeError);
+        }
+      }
+      resolve({ code });
+    });
+
+    server.once('error', (err) => {
+      pendingGoogleAuthFlow = null;
+      reject(
+        new Error(
+          err?.code === 'EADDRINUSE'
+            ? `Google sign-in could not start because ${callbackURL.origin} is already in use.`
+            : `Google sign-in could not start: ${err.message}`
+        )
+      );
+    });
+
+    server.listen(Number(callbackURL.port), callbackURL.hostname, () => {
+      const timeoutId = setTimeout(() => {
+        closePendingGoogleAuthFlow(new Error('Google sign-in timed out. Try again.'));
+      }, GOOGLE_AUTH_TIMEOUT_MS);
+
+      pendingGoogleAuthFlow = {
+        server,
+        timeoutId,
+        reject
+      };
+    });
+  });
 }
 
 function isWordLookupEnabled() {
@@ -381,15 +593,34 @@ function showLookupForPendingWord() {
   }
 }
 
+function readLookupSelectionText(clipboard) {
+  try {
+    const selectionText = clipboard.readText('selection');
+    if (selectionText) {
+      return selectionText.trim();
+    }
+  } catch (err) {
+    // Ignore primary-selection read failures and fall back to the regular clipboard.
+  }
+
+  try {
+    return (clipboard.readText() || '').trim();
+  } catch (err) {
+    return '';
+  }
+}
+
 function startClipboardMonitor() {
   const { clipboard } = require('electron');
   stopClipboardMonitor();
+  lastClipboardText = readLookupSelectionText(clipboard);
 
   clipboardMonitorInterval = setInterval(() => {
     try {
+      const trimmed = readLookupSelectionText(clipboard);
+
       if (!isWordLookupEnabled()) {
-        if (lastClipboardText || pendingLookupWord || lookupOpenTimeout) {
-          lastClipboardText = '';
+        if (pendingLookupWord || lookupOpenTimeout) {
           pendingLookupWord = '';
 
           if (lookupOpenTimeout) {
@@ -401,18 +632,10 @@ function startClipboardMonitor() {
             widgetWindow.webContents.send('word-cleared');
           }
         }
+
+        lastClipboardText = trimmed;
         return;
       }
-
-      let text = '';
-
-      try {
-        text = clipboard.readText('selection');
-      } catch (err) {
-        text = clipboard.readText();
-      }
-
-      const trimmed = (text || '').trim();
 
       if (trimmed && trimmed !== lastClipboardText) {
         const wordCount = trimmed.split(/\s+/).length;
@@ -429,10 +652,15 @@ function startClipboardMonitor() {
             showLookupForPendingWord();
           }, 180);
         } else if (trimmed.length < 3 || wordCount !== 1) {
+          lastClipboardText = trimmed;
           pendingLookupWord = '';
           if (lookupOpenTimeout) {
             clearTimeout(lookupOpenTimeout);
             lookupOpenTimeout = null;
+          }
+
+          if (widgetWindow && !widgetWindow.isDestroyed()) {
+            widgetWindow.webContents.send('word-cleared');
           }
         }
       } else if (!trimmed && lastClipboardText) {
@@ -481,6 +709,19 @@ function launchMainApp() {
   startClipboardMonitor();
 }
 
+function teardownAuthenticatedShell() {
+  stopClipboardMonitor();
+  destroyTray();
+
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.close();
+  }
+
+  if (widgetWindow && !widgetWindow.isDestroyed()) {
+    widgetWindow.close();
+  }
+}
+
 
 
 // ── Create auth window ────────────────────────────────────────────────────────
@@ -506,7 +747,8 @@ function createAuthWindow() {
     authWindow = null;
 
     const hasSession = Boolean(store.get('auth.accessToken') && store.get('auth.refreshToken'));
-    if (!isQuitting && !hasSession && !tray && !widgetWindow && !settingsWindow) {
+    if (!isQuitting && !hasSession) {
+      teardownAuthenticatedShell();
       app.quit();
     }
   });
@@ -586,12 +828,7 @@ function selectSettingsTab(tabPayload) {
 
 // ── Tray ──────────────────────────────────────────────────────────────────────
 function createTray() {
-  // Create a simple 16x16 purple dot icon
-  const icon = nativeImage.createFromDataURL(
-    'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAABHNCSVQICAgIfAhkiAAAAAlwSFlzAAAAdgAAAHYBTnsmCAAAABl0RVh0U29mdHdhcmUAd3d3Lmlua3NjYXBlLm9yZ5vuPBoAAAFJSURBVDiNpdM9S8NAGMDx/5Nc0kKhUBwEwUVwcRMcXPwAfgAHBxEHQXDRr+Dg4CI4iYOTk4uDgyAIQnFwEAQHBUGQYqFJm+Z6DqZN2qTW5x7u7vfcc/cS/lMopQghEEKglEIpBSEESimUUiilIIRAKYVSCqUUSikIIVBKQQiBUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKUghEAphVIKQgiUUiilIIRAKYVSCkIIlFIopSCEQCmFUgpCCJRSKKX4AXYVXKzFfX1yAAAAAElFTkSuQmCC'
-  );
-  
-  tray = new Tray(icon);
+  tray = new Tray(getTrayIcon());
   tray.setToolTip('FocusPal');
   const menu = Menu.buildFromTemplate([
     { label: 'Show Widget', click: () => widgetWindow?.show() },
@@ -628,6 +865,10 @@ function clearAuthSession() {
 function getAuthErrorMessage(error, fallback) {
   if (error instanceof SupabaseRequestError) {
     return error.message || fallback;
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
   }
 
   return fallback;
@@ -1113,6 +1354,58 @@ ipcMain.handle('auth-register', async (e, name, email, password) => {
   }
 });
 
+ipcMain.handle('auth-google', async () => {
+  try {
+    if (!supabaseClient.isConfigured()) {
+      return {
+        success: false,
+        error: supabaseClient.getConfigError()
+      };
+    }
+
+    const redirectURL = supabaseClient.getGoogleAuthRedirectURL();
+    if (!redirectURL) {
+      return {
+        success: false,
+        error: 'Google auth redirect URL is not configured.'
+      };
+    }
+
+    const codeVerifier = createCodeVerifier();
+    const codeChallenge = createCodeChallenge(codeVerifier);
+
+    const callbackPromise = waitForGoogleOAuthCallback(redirectURL);
+    const authURL = supabaseClient.getOAuthAuthorizeURL({
+      provider: 'google',
+      redirectTo: redirectURL,
+      codeChallenge
+    });
+
+    await shell.openExternal(authURL);
+
+    const { code } = await callbackPromise;
+    const session = await supabaseClient.exchangeOAuthCodeForSession({
+      authCode: code,
+      codeVerifier
+    });
+
+    if (authWindow && !authWindow.isDestroyed()) {
+      authWindow.show();
+      authWindow.focus();
+    }
+
+    await completeAuthSuccess(session);
+    return { success: true, user: normalizeSupabaseUser(session.user) };
+  } catch (err) {
+    closePendingGoogleAuthFlow();
+    console.error('Google auth error:', err);
+    return {
+      success: false,
+      error: getAuthErrorMessage(err, 'Google sign-in failed')
+    };
+  }
+});
+
 ipcMain.handle('auth-logout', async () => {
   try {
     await supabaseClient.signOut();
@@ -1120,16 +1413,8 @@ ipcMain.handle('auth-logout', async () => {
     console.error('Logout error:', err);
   }
   
-  stopClipboardMonitor();
   clearAuthSession();
-  
-  // Close widget and settings windows
-  if (widgetWindow && !widgetWindow.isDestroyed()) {
-    widgetWindow.close();
-  }
-  if (settingsWindow && !settingsWindow.isDestroyed()) {
-    settingsWindow.close();
-  }
+  teardownAuthenticatedShell();
   
   // Show auth window
   createAuthWindow();
@@ -1207,6 +1492,7 @@ app.on('window-all-closed', (e) => {
 
 app.on('before-quit', () => {
   isQuitting = true;
+  closePendingGoogleAuthFlow();
   stopClipboardMonitor();
   globalShortcut.unregisterAll();
 });

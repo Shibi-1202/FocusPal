@@ -8,6 +8,7 @@ directories:
 
 files:
   - src/**/*
+  - assets/**/*
   - package.json
   - "!**/{.git,.gitignore,.env,.env.*}"
   - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
@@ -22,6 +23,7 @@ extraResources:
     to: config/supabase.json
 
 linux:
+  icon: assets/icon.png
   target:
     - target: AppImage
       arch:

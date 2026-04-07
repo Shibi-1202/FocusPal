@@ -34,6 +34,7 @@ class SupabaseClient {
     this.url = options.url || config.url;
     this.anonKey = options.anonKey || config.anonKey;
     this.passwordResetRedirectURL = options.passwordResetRedirectURL || config.passwordResetRedirectURL || '';
+    this.googleAuthRedirectURL = options.googleAuthRedirectURL || config.googleAuthRedirectURL || '';
     this.accessToken = null;
     this.refreshToken = null;
   }
@@ -65,6 +66,10 @@ class SupabaseClient {
       accessToken: this.accessToken,
       refreshToken: this.refreshToken
     };
+  }
+
+  getGoogleAuthRedirectURL() {
+    return this.googleAuthRedirectURL;
   }
 
   async request(path, options = {}) {
@@ -190,6 +195,56 @@ class SupabaseClient {
     return this.request('/auth/v1/recover', {
       method: 'POST',
       body
+    });
+  }
+
+  getOAuthAuthorizeURL({
+    provider,
+    redirectTo = this.googleAuthRedirectURL,
+    scopes = 'email profile',
+    queryParams = {},
+    flowType = 'pkce',
+    codeChallenge,
+    codeChallengeMethod = 's256'
+  }) {
+    if (!this.isConfigured()) {
+      throw new SupabaseRequestError(this.getConfigError(), 500);
+    }
+
+    const params = new URLSearchParams({
+      provider,
+      redirect_to: redirectTo
+    });
+
+    if (scopes) {
+      params.set('scopes', scopes);
+    }
+
+    if (flowType) {
+      params.set('flow_type', flowType);
+    }
+
+    if (codeChallenge) {
+      params.set('code_challenge', codeChallenge);
+      params.set('code_challenge_method', codeChallengeMethod);
+    }
+
+    Object.entries(queryParams).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== '') {
+        params.set(key, String(value));
+      }
+    });
+
+    return `${this.url}/auth/v1/authorize?${params.toString()}`;
+  }
+
+  async exchangeOAuthCodeForSession({ authCode, codeVerifier }) {
+    return this.request('/auth/v1/token?grant_type=pkce', {
+      method: 'POST',
+      body: {
+        auth_code: authCode,
+        code_verifier: codeVerifier
+      }
     });
   }
 

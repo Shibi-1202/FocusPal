@@ -35,16 +35,19 @@
       "target": ["AppImage", "deb"],
       "category": "Utility",
       "maintainer": "FocusPal Team <support@focuspal.com>",
-      "executableName": "focuspal"
+      "executableName": "focuspal",
+      "icon": "assets/icon.png"
     },
     "win": {
-      "target": ["nsis", "portable"]
+      "target": ["nsis", "portable"],
+      "icon": "assets/icon.ico"
     },
     "deb": {
       "packageName": "focuspal"
     },
     "files": [
-      "src/**/*"
+      "src/**/*",
+      "assets/**/*"
     ],
     "extraResources": [
       {

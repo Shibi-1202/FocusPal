@@ -57,9 +57,17 @@
     overflow: hidden;
   }
   #dot .dot-inner {
-    width: 10px; height: 10px;
-    border-radius: 50%;
+    width: 18px;
+    height: 18px;
     background: var(--accent);
+    -webkit-mask-image: url('../../assets/logo.svg');
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+    -webkit-mask-size: contain;
+    mask-image: url('../../assets/logo.svg');
+    mask-repeat: no-repeat;
+    mask-position: center;
+    mask-size: contain;
     transition: background 0.3s;
     flex-shrink: 0;
   }
@@ -203,6 +211,17 @@
     padding: 10px 14px 8px;
     border-bottom: 1px solid var(--border);
     cursor: move;
+  }
+  .card-header .brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+  .card-header .logo-mark {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
   }
   .card-header .logo {
     font-size: 11px;

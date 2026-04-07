@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const DEFAULT_GOOGLE_AUTH_REDIRECT_URL = 'http://127.0.0.1:38081/auth/callback';
 
 function getConfigFilePath() {
   if (process.resourcesPath && process.defaultApp !== true) {
@@ -32,5 +33,9 @@ module.exports = {
   url: process.env.SUPABASE_URL || fileConfig.url || '',
   anonKey: process.env.SUPABASE_ANON_KEY || fileConfig.anonKey || '',
   passwordResetRedirectURL:
-    process.env.SUPABASE_PASSWORD_RESET_REDIRECT_URL || fileConfig.passwordResetRedirectURL || ''
+    process.env.SUPABASE_PASSWORD_RESET_REDIRECT_URL || fileConfig.passwordResetRedirectURL || '',
+  googleAuthRedirectURL:
+    process.env.SUPABASE_GOOGLE_AUTH_REDIRECT_URL ||
+    fileConfig.googleAuthRedirectURL ||
+    DEFAULT_GOOGLE_AUTH_REDIRECT_URL
 };

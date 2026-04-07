@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('fp', {
   auth: {
     login: (email, password) => ipcRenderer.invoke('auth-login', email, password),
     register: (name, email, password) => ipcRenderer.invoke('auth-register', name, email, password),
+    loginWithGoogle: () => ipcRenderer.invoke('auth-google'),
     logout: () => ipcRenderer.invoke('auth-logout'),
     getUser: () => ipcRenderer.invoke('auth-get-user'),
     requestPasswordReset: (email) => ipcRenderer.invoke('auth-forgot-password', email)

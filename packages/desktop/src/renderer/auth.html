@@ -19,75 +19,76 @@
 
   <div class="auth-wrapper">
     <div class="auth-container">
-      <div class="logo">🎯</div>
-    <h1 class="app-name">FocusPal</h1>
-    <p class="welcome-text" id="welcomeText">Welcome to FocusPal</p>
-
-    <div class="error-message" id="errorMessage"></div>
-
-    <form id="authForm">
-      <div class="form-group name-field" id="nameField">
-        <label for="name">Name</label>
-        <input 
-          type="text" 
-          id="name" 
-          placeholder="Your name"
-          autocomplete="name"
-        >
+      <div class="logo">
+        <img class="logo-mark" src="../../assets/logo.svg" alt="FocusPal logo">
       </div>
+      <h1 class="app-name">FocusPal</h1>
+      <p class="welcome-text" id="welcomeText">Welcome to FocusPal</p>
 
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input 
-          type="email" 
-          id="email" 
-          placeholder="you@example.com"
-          autocomplete="email"
-          required
-        >
-      </div>
+      <div class="error-message" id="errorMessage"></div>
 
-      <div class="form-group">
-        <label for="password">Password</label>
-        <div class="input-wrapper">
+      <form id="authForm">
+        <div class="form-group name-field" id="nameField">
+          <label for="name">Name</label>
           <input 
-            type="password" 
-            id="password" 
-            placeholder="••••••••"
-            autocomplete="current-password"
+            type="text" 
+            id="name" 
+            placeholder="Your name"
+            autocomplete="name"
+          >
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email</label>
+          <input 
+            type="email" 
+            id="email" 
+            placeholder="you@example.com"
+            autocomplete="email"
             required
           >
-          <button type="button" class="password-toggle" id="passwordToggle">
-            👁️
-          </button>
         </div>
-        <div class="password-strength" id="passwordStrength">
-          <div class="strength-bar">
-            <div class="strength-fill" id="strengthFill"></div>
+
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-wrapper">
+            <input 
+              type="password" 
+              id="password" 
+              placeholder="••••••••"
+              autocomplete="current-password"
+              required
+            >
+            <button type="button" class="password-toggle" id="passwordToggle">
+              👁️
+            </button>
           </div>
-          <div class="strength-text" id="strengthText">Enter a password</div>
+          <div class="password-strength" id="passwordStrength">
+            <div class="strength-bar">
+              <div class="strength-fill" id="strengthFill"></div>
+            </div>
+            <div class="strength-text" id="strengthText">Enter a password</div>
+          </div>
         </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">
+          <span class="spinner"></span>
+          <span id="submitText">Sign In</span>
+        </button>
+
+        <a href="#" class="forgot-password" id="forgotPassword">Forgot password?</a>
+      </form>
+
+      <div class="divider">Or continue with</div>
+
+      <div class="oauth-buttons">
+        <button class="oauth-btn google" id="btn-google-auth" type="button">Continue with Google</button>
       </div>
 
-      <button type="submit" class="submit-btn" id="submitBtn">
-        <span class="spinner"></span>
-        <span id="submitText">Sign In</span>
-      </button>
-
-      <a href="#" class="forgot-password" id="forgotPassword">Forgot password?</a>
-    </form>
-
-    <div class="divider">Or continue with</div>
-
-    <div class="oauth-buttons">
-      <button class="oauth-btn" disabled>Google</button>
-      <button class="oauth-btn" disabled>GitHub</button>
-    </div>
-
-    <div class="mode-toggle">
-      <span id="modeToggleText">Don't have an account?</span>
-      <a id="modeToggleLink">Create Account</a>
-    </div>
+      <div class="mode-toggle">
+        <span id="modeToggleText">Don't have an account?</span>
+        <a id="modeToggleLink">Create Account</a>
+      </div>
     </div>
   </div>
 
