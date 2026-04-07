@@ -2,6 +2,9 @@ appId: com.focuspal.app
 productName: FocusPal
 copyright: Copyright © 2024
 
+toolsets:
+  winCodeSign: "1.1.0"
+
 directories:
   output: dist
   buildResources: assets
