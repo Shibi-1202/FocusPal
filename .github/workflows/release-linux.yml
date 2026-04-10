@@ -103,9 +103,24 @@ jobs:
         env:
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
         run: |
-          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
+          set +e
+          IMPORT_OUTPUT="$(printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import 2>&1)"
+          IMPORT_STATUS=$?
+          set -e
+
+          printf '%s\n' "$IMPORT_OUTPUT"
+
+          if [[ "$IMPORT_STATUS" -ne 0 && "$IMPORT_STATUS" -ne 2 ]]; then
+            echo "GPG import failed with exit code $IMPORT_STATUS." >&2
+            exit "$IMPORT_STATUS"
+          fi
 
           APT_GPG_KEY="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ { print $10; exit }')"
+          if [[ -z "$APT_GPG_KEY" ]]; then
+            echo "No secret key was available after import." >&2
+            exit 1
+          fi
+
           if ! gpg --list-secret-keys --with-colons "$APT_GPG_KEY" | grep -q '^sec'; then
             echo "Expected GPG secret key $APT_GPG_KEY was not imported." >&2
             exit 1
