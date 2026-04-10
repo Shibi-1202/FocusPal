@@ -110,12 +110,12 @@ jobs:
 
           printf '%s' "$APT_GPG_PRIVATE_KEY" > "$RAW_KEY_FILE"
 
-          if grep -Eq '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----' "$RAW_KEY_FILE"; then
+          if grep -Eq -- '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----' "$RAW_KEY_FILE"; then
             cp "$RAW_KEY_FILE" "$PREPARED_KEY_FILE"
-          elif printf '%b' "$APT_GPG_PRIVATE_KEY" | grep -Eq '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----'; then
+          elif printf '%b' "$APT_GPG_PRIVATE_KEY" | grep -Eq -- '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----'; then
             printf '%b' "$APT_GPG_PRIVATE_KEY" > "$PREPARED_KEY_FILE"
           elif printf '%s' "$APT_GPG_PRIVATE_KEY" | base64 -d > "$PREPARED_KEY_FILE" 2>/dev/null \
-            && grep -Eq '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----' "$PREPARED_KEY_FILE"; then
+            && grep -Eq -- '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----' "$PREPARED_KEY_FILE"; then
             :
           else
             echo "APT_GPG_PRIVATE_KEY is not valid OpenPGP private key data." >&2
@@ -132,7 +132,7 @@ jobs:
             /-----END PGP (PRIVATE|SECRET) KEY BLOCK-----/ { exit }
           ' "$PREPARED_KEY_FILE" > "$CLEAN_KEY_FILE"
 
-          if ! grep -Eq 'BEGIN PGP (PRIVATE|SECRET) KEY BLOCK' "$CLEAN_KEY_FILE"; then
+          if ! grep -Eq -- 'BEGIN PGP (PRIVATE|SECRET) KEY BLOCK' "$CLEAN_KEY_FILE"; then
             echo "APT_GPG_PRIVATE_KEY does not contain a valid armored private key block." >&2
             exit 1
           fi
