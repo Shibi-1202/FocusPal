@@ -99,9 +99,9 @@ jobs:
         run: pnpm --filter @focuspal/desktop test
 
       - name: Import APT signing key
+        id: import_apt_signing_key
         env:
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
-          APT_GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
         run: |
           RAW_KEY_FILE="$(mktemp)"
           PREPARED_KEY_FILE="$(mktemp)"
@@ -137,13 +137,20 @@ jobs:
             exit 1
           fi
 
-          gpg --batch --import "$CLEAN_KEY_FILE"
-
-          if ! gpg --list-secret-keys --with-colons "$APT_GPG_KEY_ID" | grep -q '^sec'; then
-            echo "Expected GPG secret key $APT_GPG_KEY_ID was not imported." >&2
+          APT_GPG_KEY="$(gpg --show-keys --with-colons "$CLEAN_KEY_FILE" | awk -F: '/^fpr:/ { print $10; exit }')"
+          if [[ -z "$APT_GPG_KEY" ]]; then
+            echo "Unable to determine a signing key fingerprint from APT_GPG_PRIVATE_KEY." >&2
             exit 1
           fi
 
+          gpg --batch --import "$CLEAN_KEY_FILE"
+
+          if ! gpg --list-secret-keys --with-colons "$APT_GPG_KEY" | grep -q '^sec'; then
+            echo "Expected GPG secret key $APT_GPG_KEY was not imported." >&2
+            exit 1
+          fi
+
+          echo "gpg_key=$APT_GPG_KEY" >> "$GITHUB_OUTPUT"
           gpg --list-secret-keys --keyid-format LONG
 
       - name: Build Linux artifacts
@@ -156,7 +163,7 @@ jobs:
 
       - name: Publish APT repository
         env:
-          APT_GPG_KEY: ${{ secrets.APT_GPG_KEY_ID }}
+          APT_GPG_KEY: ${{ steps.import_apt_signing_key.outputs.gpg_key }}
           APT_GPG_PASSPHRASE: ${{ secrets.APT_GPG_PASSPHRASE }}
           APT_BATCH_SIGNING: "1"
         run: ./scripts/publish-apt.sh
