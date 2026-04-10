@@ -1,6 +1,6 @@
   const { formatRelativeDateLabel } = window.FocusPalDateUtils;
   const { normalizeNotificationSound } = window.FocusPalRendererUtils;
-  const { generateTaskId, getTodayString, shouldTaskAppearOnDate } = window.FocusPalTaskUtils;
+  const { generateTaskId, getTaskDate, getTodayString, shouldTaskAppearOnDate } = window.FocusPalTaskUtils;
   const BREAK_INTERVAL_DEFAULTS = {
     water: 45,
     stretch: 60,
@@ -60,16 +60,6 @@
 
   function formatTimeString(hours, minutes) {
     return `${padTimePart(hours)}:${padTimePart(minutes)}`;
-  }
-
-  function timeStringToMinutes(value) {
-    const { hours, minutes } = parseTimeString(value);
-    return (hours * 60) + minutes;
-  }
-
-  function minutesToTimeString(totalMinutes) {
-    const normalized = Math.min(Math.max(totalMinutes, 0), (23 * 60) + 59);
-    return formatTimeString(Math.floor(normalized / 60), normalized % 60);
   }
 
   function clampBreakIntervalValue(value, fallback) {
@@ -273,22 +263,6 @@
     };
   }
 
-  function ensureDateTimePickerTimeOrder(changedField = 'start') {
-    const startMinutes = timeStringToMinutes(dateTimePickerState.startTime);
-    const endMinutes = timeStringToMinutes(dateTimePickerState.endTime);
-
-    if (endMinutes > startMinutes) {
-      return;
-    }
-
-    if (changedField === 'start') {
-      dateTimePickerState.endTime = minutesToTimeString(startMinutes + TASK_DURATION_DEFAULT_MINUTES);
-      return;
-    }
-
-    dateTimePickerState.startTime = minutesToTimeString(Math.max(endMinutes - TASK_DURATION_DEFAULT_MINUTES, 0));
-  }
-
   function applyDateTimePickerSelection() {
     setTaskDateInput(dateTimePickerState.selectedDate);
     setTaskTimeInputs(dateTimePickerState.startTime, dateTimePickerState.endTime);
@@ -336,6 +310,19 @@
       + getWrappedWheelIndex(wheel, index);
   }
 
+  function getWheelCenterOffset(wheel) {
+    const viewportHeight = Math.max(wheel?.clientHeight || 0, TIME_WHEEL_ITEM_HEIGHT);
+    return (TIME_WHEEL_SPACERS * TIME_WHEEL_ITEM_HEIGHT) - ((viewportHeight - TIME_WHEEL_ITEM_HEIGHT) / 2);
+  }
+
+  function getWheelScrollTopForIndex(wheel, index) {
+    return Math.max(0, getWheelCenterOffset(wheel) + (index * TIME_WHEEL_ITEM_HEIGHT));
+  }
+
+  function getWheelIndexFromScrollTop(wheel, scrollTop = wheel?.scrollTop || 0) {
+    return Math.round((scrollTop - getWheelCenterOffset(wheel)) / TIME_WHEEL_ITEM_HEIGHT);
+  }
+
   function getSelectedWheelBaseIndex(wheel) {
     const currentIndex = Number(wheel.dataset.selectedBaseIndex);
     if (Number.isFinite(currentIndex)) {
@@ -364,7 +351,7 @@
 
   function normalizeWheelIndex(wheel, index = null) {
     const nextIndex = index === null
-      ? Math.round(wheel.scrollTop / TIME_WHEEL_ITEM_HEIGHT)
+      ? getWheelIndexFromScrollTop(wheel)
       : index;
     const clampedIndex = getClampedWheelIndex(wheel, nextIndex);
     const baseCount = getWheelBaseCount(wheel);
@@ -378,7 +365,7 @@
     const centeredIndex = getWheelMiddleIndex(wheel, clampedIndex);
 
     if (clampedIndex < baseCount || clampedIndex >= totalCount - baseCount) {
-      wheel.scrollTop = centeredIndex * TIME_WHEEL_ITEM_HEIGHT;
+      wheel.scrollTop = getWheelScrollTopForIndex(wheel, centeredIndex);
       return centeredIndex;
     }
 
@@ -389,7 +376,7 @@
     const nextIndex = getClampedWheelIndex(wheel, index);
     wheel.dataset.selectedIndex = String(nextIndex);
     wheel.dataset.selectedBaseIndex = String(getWrappedWheelIndex(wheel, nextIndex));
-    wheel.scrollTo({ top: nextIndex * TIME_WHEEL_ITEM_HEIGHT, behavior });
+    wheel.scrollTo({ top: getWheelScrollTopForIndex(wheel, nextIndex), behavior });
     updateSelectedItems(wheel, nextIndex);
   }
 
@@ -464,7 +451,6 @@
       dateTimePickerState.endTime = nextTime;
     }
 
-    ensureDateTimePickerTimeOrder(currentTimeTarget);
     applyDateTimePickerSelection();
     updateDateTimePickerTimeTargets();
   }
@@ -653,30 +639,81 @@
     return shouldTaskAppearOnDate(task, getTodayString());
   }
 
-  function renderTaskList() {
-    const list = document.getElementById('task-list');
-    const todayTasks = tasks.filter(isTaskForToday);
+  function sortTasksByStartTime(left, right) {
+    return String(left.start || '').localeCompare(String(right.start || ''));
+  }
 
-    if (todayTasks.length === 0) {
-      list.innerHTML = '<div style="color:var(--muted); font-size:12px; text-align:center; padding:12px 0;">No tasks yet — add one below</div>';
-      return;
-    }
-    // Sort by start time
-    const sorted = [...todayTasks].sort((a, b) => a.start.localeCompare(b.start));
-    list.innerHTML = sorted.map((t) => {
-      const recurringLabel = t.recurring && t.recurring !== 'none' 
-        ? `<span style="font-size:9px; color:var(--muted); margin-left:4px;">↻ ${t.recurring}</span>` 
+  function renderTaskItems(taskItems) {
+    return taskItems.map((task) => {
+      const recurringLabel = task.recurring && task.recurring !== 'none'
+        ? `<span style="font-size:9px; color:var(--muted); margin-left:4px;">↻ ${task.recurring}</span>`
         : '';
+
       return `
       <div class="task-item">
-        <div class="task-color-dot" style="background:${t.color || '#7c6cfc'}"></div>
+        <div class="task-color-dot" style="background:${task.color || '#7c6cfc'}"></div>
         <div class="task-item-info">
-          <div class="task-item-name">${t.name}${recurringLabel}</div>
-          <div class="task-item-time">${t.start} – ${t.end}</div>
+          <div class="task-item-name">${task.name}${recurringLabel}</div>
+          <div class="task-item-time">${task.start} – ${task.end}</div>
         </div>
-        <button class="task-delete" onclick="handleDeleteTask('${t.id}')" title="Remove">✕</button>
+        <button class="task-delete" onclick="handleDeleteTask('${task.id}')" title="Remove">✕</button>
       </div>`;
     }).join('');
+  }
+
+  function renderTaskList() {
+    const todayList = document.getElementById('task-list');
+    const scheduledList = document.getElementById('scheduled-task-list');
+    const scheduledSection = document.getElementById('scheduled-task-section');
+    const todayTasks = tasks.filter(isTaskForToday).sort(sortTasksByStartTime);
+    const scheduledTasks = tasks
+      .filter((task) => {
+        const taskDate = getTaskDate(task, '');
+        return taskDate && taskDate !== getTodayString();
+      })
+      .sort((left, right) => {
+        const dateCompare = getTaskDate(left, '').localeCompare(getTaskDate(right, ''));
+        if (dateCompare !== 0) {
+          return dateCompare;
+        }
+
+        return sortTasksByStartTime(left, right);
+      });
+
+    if (todayTasks.length === 0) {
+      todayList.innerHTML = '<div class="task-list-empty">No tasks yet — add one below</div>';
+    } else {
+      todayList.innerHTML = renderTaskItems(todayTasks);
+    }
+
+    if (scheduledTasks.length === 0) {
+      scheduledList.innerHTML = '<div class="task-list-empty">No tasks scheduled for other dates yet</div>';
+      scheduledSection.classList.add('hidden');
+      return;
+    }
+
+    const groupedTasks = scheduledTasks.reduce((groups, task) => {
+      const taskDate = getTaskDate(task, '');
+      if (!groups.has(taskDate)) {
+        groups.set(taskDate, []);
+      }
+      groups.get(taskDate).push(task);
+      return groups;
+    }, new Map());
+
+    scheduledList.innerHTML = Array.from(groupedTasks.entries()).map(([taskDate, dateTasks]) => `
+      <div class="task-date-group">
+        <div class="task-date-heading">
+          <div class="task-date-title">${formatTaskDateLabel(taskDate)}</div>
+          <div class="task-date-meta">${taskDate}</div>
+        </div>
+        <div class="task-date-items">
+          ${renderTaskItems(dateTasks)}
+        </div>
+      </div>
+    `).join('');
+
+    scheduledSection.classList.remove('hidden');
   }
 
   // Wrapper function for onclick handler (can't use async directly in onclick)
@@ -750,6 +787,21 @@
     } catch (err) {
       console.error('Logout error:', err);
       alert('Failed to logout. Please try again.');
+    }
+  }
+
+  async function loadAppVersion() {
+    const versionLabel = document.getElementById('app-version');
+    if (!versionLabel) {
+      return;
+    }
+
+    try {
+      const version = await window.fp.getAppVersion();
+      versionLabel.textContent = version ? `v${version}` : 'v-';
+    } catch (err) {
+      console.error('Failed to load app version:', err);
+      versionLabel.textContent = 'v-';
     }
   }
 
@@ -953,6 +1005,7 @@
   populateThemePresetOptions();
   setTaskDateInput(plannedTaskDate || getTodayString());
   applyAdaptiveTaskTimeDefaults();
+  loadAppVersion();
   window.fp.onLookupSettingUpdated((data) => {
     document.getElementById('toggle-word-lookup').checked = data?.enabled !== false;
   });

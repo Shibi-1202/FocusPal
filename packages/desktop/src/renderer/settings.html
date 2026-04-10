@@ -113,6 +113,11 @@
         <button class="btn-primary" id="btn-add-task">+ Add task</button>
       </div>
 
+      <div class="section scheduled-task-section hidden" id="scheduled-task-section">
+        <div class="section-label">Scheduled tasks</div>
+        <div id="scheduled-task-list"></div>
+      </div>
+
     </div>
 
     <!-- ── Pomodoro panel ────────────────────────────────── -->
@@ -425,7 +430,7 @@
       <div class="section">
         <div class="section-label">About</div>
         <div style="padding: 10px 0; color: var(--muted); font-size: 12px; line-height: 1.6;">
-          <div style="margin-bottom: 8px;"><strong style="color: var(--text);">FocusPal</strong> v1.0.0</div>
+          <div style="margin-bottom: 8px;"><strong style="color: var(--text);">FocusPal</strong> <span id="app-version">v-</span></div>
           <div>Your personal productivity companion</div>
         </div>
       </div>

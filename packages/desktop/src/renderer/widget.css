@@ -447,29 +447,31 @@
     font-weight: 500;
     color: var(--muted);
   }
-  .task-prompt-label {
+  .task-prompt-extension {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .task-prompt-extension-label {
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--muted);
   }
-  .task-prompt-note {
-    width: 100%;
-    min-height: 82px;
-    resize: vertical;
-    padding: 12px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    background: var(--bg2);
-    color: var(--text);
-    font: inherit;
-    font-size: 13px;
-    line-height: 1.5;
+  .task-prompt-extension-options {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
   }
-  .task-prompt-note:focus {
-    outline: none;
+  .task-prompt-btn.extension {
+    padding: 10px 8px;
+    text-align: center;
+    border-color: rgba(255,255,255,0.08);
+  }
+  .task-prompt-btn.extension:hover {
     border-color: rgba(124,108,252,0.55);
+    background: rgba(124,108,252,0.12);
   }
 
   /* Clock */

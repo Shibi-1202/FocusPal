@@ -1042,6 +1042,8 @@ ipcMain.handle('set-position', (e, x, y) => {
   }
 });
 
+ipcMain.handle('get-app-version', () => app.getVersion());
+
 // Store CRUD
 ipcMain.handle('store-get', async (e, key) => {
   try {

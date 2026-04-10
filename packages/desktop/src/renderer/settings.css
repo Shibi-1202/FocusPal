@@ -227,6 +227,7 @@
 
   /* Task list */
   #task-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+  #scheduled-task-list { display: flex; flex-direction: column; gap: 12px; }
   .task-item {
     display: flex; align-items: center; gap: 8px;
     padding: 10px 12px;
@@ -254,6 +255,50 @@
     flex-shrink: 0;
   }
   .task-delete:hover { background: rgba(248,113,113,0.15); color: var(--red); }
+  .scheduled-task-section {
+    margin-top: 14px;
+  }
+  .scheduled-task-section.hidden {
+    display: none;
+  }
+  .task-date-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+  }
+  .task-date-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .task-date-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .task-date-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .task-date-items {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .task-list-empty {
+    color: var(--muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 12px 0;
+  }
 
   /* Add task form */
   .add-task-form {

@@ -227,11 +227,6 @@
     render();
   }
 
-  function updateTaskPromptNote(value) {
-    if (!taskPromptState || taskPromptState.type !== 'end') return;
-    taskPromptState.note = value;
-  }
-
   function renderTaskPrompt(content) {
     if (!taskPromptState) return false;
 
@@ -256,13 +251,30 @@
 
     if (taskPromptState.type === 'end') {
       const selectedStatus = taskPromptState.selectedStatus || 'completed';
-      const note = escapeHtml(taskPromptState.note || '');
+      const isPartialSelected = selectedStatus === 'partial';
+      const promptSubtitle = isPartialSelected
+        ? 'Add more time to continue this task. Later tasks will shift automatically if needed.'
+        : 'Save the outcome here. Once saved, the task is archived and removed from today’s schedule.';
+      const promptActions = isPartialSelected
+        ? `
+          <div class="task-prompt-extension">
+            <div class="task-prompt-extension-label">Add more time</div>
+            <div class="task-prompt-extension-options">
+              <button class="task-prompt-btn extension" onclick="resolveTaskPrompt({ action: 'extend', minutes: 5 })">+5 min</button>
+              <button class="task-prompt-btn extension" onclick="resolveTaskPrompt({ action: 'extend', minutes: 10 })">+10 min</button>
+              <button class="task-prompt-btn extension" onclick="resolveTaskPrompt({ action: 'extend', minutes: 15 })">+15 min</button>
+            </div>
+          </div>`
+        : `
+          <div class="task-prompt-actions" style="grid-template-columns: 1fr;">
+            <button class="task-prompt-btn primary" onclick="resolveTaskPrompt({ status: 'completed' })">Save outcome</button>
+          </div>`;
 
       content.innerHTML = `
         <div class="task-prompt">
           <div class="task-prompt-header">
             <div class="task-prompt-title">How did it go?</div>
-            <div class="task-prompt-subtitle">Save the outcome here. Once saved, the task is archived and removed from today’s schedule.</div>
+            <div class="task-prompt-subtitle">${promptSubtitle}</div>
           </div>
           <div class="task-prompt-task">
             <div class="task-prompt-task-name">${escapeHtml(taskPromptState.name)}</div>
@@ -275,18 +287,10 @@
             </button>
             <button class="task-prompt-btn status ${selectedStatus === 'partial' ? 'active' : ''}" onclick="updateTaskPromptStatus('partial')">
               <strong>Partially Done</strong>
-              <span>Made progress, but not all of it</span>
-            </button>
-            <button class="task-prompt-btn status ${selectedStatus === 'skipped' ? 'active' : ''}" onclick="updateTaskPromptStatus('skipped')">
-              <strong>Didn’t Start</strong>
-              <span>Couldn’t begin the task today</span>
+              <span>Keep working and push the next task forward</span>
             </button>
           </div>
-          <div class="task-prompt-label">Quick note</div>
-          <textarea class="task-prompt-note" placeholder="How did it go? Any blockers?" oninput="updateTaskPromptNote(this.value)">${note}</textarea>
-          <div class="task-prompt-actions" style="grid-template-columns: 1fr;">
-            <button class="task-prompt-btn primary" onclick="resolveTaskPrompt({ status: '${selectedStatus}', note: taskPromptState ? (taskPromptState.note || '') : '' })">Save outcome</button>
-          </div>
+          ${promptActions}
         </div>`;
       return true;
     }
@@ -589,6 +593,26 @@
     }
   }
 
+  async function extendTaskByMinutes(task, minutes) {
+    const extraMinutes = Math.max(0, Number(minutes) || 0);
+    if (!extraMinutes) {
+      return;
+    }
+
+    const extensionMs = extraMinutes * 60 * 1000;
+    const nextEndMs = Math.max(getTaskEndMs(task), Date.now()) + extensionMs;
+
+    task.status = 'active';
+    task.end = msToTimeString(nextEndMs);
+    task.actualEndAt = new Date(nextEndMs).toISOString();
+    task.completedAt = null;
+    task.completionNote = '';
+
+    shiftFollowingTasks(task);
+    await saveTasks();
+    render();
+  }
+
   function deferTaskStart(taskId, minutes = 1) {
     const normalizedTaskId = String(taskId);
     snoozedTasks.set(normalizedTaskId, Date.now() + minutes * 60 * 1000);
@@ -655,18 +679,22 @@
             name: endedTask.name,
             plannedDurationText: fmtDuration(getTaskDurationMs(endedTask)),
             actualDurationText: actualDuration,
-            selectedStatus: 'completed',
-            note: ''
+            selectedStatus: 'completed'
           });
           
           if (result) {
-            await archiveTaskOutcome(endedTask, result.status, result.note || '');
-            console.log(`Task "${endedTask.name}" completed:`, result);
+            if (result.action === 'extend') {
+              await extendTaskByMinutes(endedTask, result.minutes);
+            } else if (result.status === 'completed') {
+              await archiveTaskOutcome(endedTask, result.status);
+              console.log(`Task "${endedTask.name}" completed:`, result);
+            }
           }
         }
       }
       
-      lastActiveTaskId = activeTaskId;
+      const currentActiveTask = getActiveTask();
+      lastActiveTaskId = currentActiveTask ? String(currentActiveTask.id) : null;
     } finally {
       taskTransitionCheckInFlight = false;
     }

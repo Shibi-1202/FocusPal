@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('fp', {
   // Persistent store
   get: (key)        => ipcRenderer.invoke('store-get', key),
   set: (key, value) => ipcRenderer.invoke('store-set', key, value),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
   // Settings window
   openSettings: (tab) => ipcRenderer.send('open-settings', tab),
