@@ -1,6 +1,6 @@
 {
   "name": "@focuspal/desktop",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "FocusPal Desktop App - Your personal productivity companion",
   "main": "src/main/main.js",
   "author": {
