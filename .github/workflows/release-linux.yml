@@ -103,48 +103,9 @@ jobs:
         env:
           APT_GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
         run: |
-          RAW_KEY_FILE="$(mktemp)"
-          PREPARED_KEY_FILE="$(mktemp)"
-          CLEAN_KEY_FILE="$(mktemp)"
-          trap 'rm -f "$RAW_KEY_FILE" "$PREPARED_KEY_FILE" "$CLEAN_KEY_FILE"' EXIT
+          printf '%s\n' "$APT_GPG_PRIVATE_KEY" | gpg --batch --import
 
-          printf '%s' "$APT_GPG_PRIVATE_KEY" > "$RAW_KEY_FILE"
-
-          if grep -Eq -- '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----' "$RAW_KEY_FILE"; then
-            cp "$RAW_KEY_FILE" "$PREPARED_KEY_FILE"
-          elif printf '%b' "$APT_GPG_PRIVATE_KEY" | grep -Eq -- '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----'; then
-            printf '%b' "$APT_GPG_PRIVATE_KEY" > "$PREPARED_KEY_FILE"
-          elif printf '%s' "$APT_GPG_PRIVATE_KEY" | base64 -d > "$PREPARED_KEY_FILE" 2>/dev/null \
-            && grep -Eq -- '-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----' "$PREPARED_KEY_FILE"; then
-            :
-          else
-            echo "APT_GPG_PRIVATE_KEY is not valid OpenPGP private key data." >&2
-            echo "Supported formats: raw armored key, armored key with literal \\n escapes, or base64-encoded armored key." >&2
-            exit 1
-          fi
-
-          awk '
-            /-----BEGIN PGP (PRIVATE|SECRET) KEY BLOCK-----/ { keep = 1 }
-            keep {
-              sub(/\r$/, "")
-              print
-            }
-            /-----END PGP (PRIVATE|SECRET) KEY BLOCK-----/ { exit }
-          ' "$PREPARED_KEY_FILE" > "$CLEAN_KEY_FILE"
-
-          if ! grep -Eq -- 'BEGIN PGP (PRIVATE|SECRET) KEY BLOCK' "$CLEAN_KEY_FILE"; then
-            echo "APT_GPG_PRIVATE_KEY does not contain a valid armored private key block." >&2
-            exit 1
-          fi
-
-          APT_GPG_KEY="$(gpg --show-keys --with-colons "$CLEAN_KEY_FILE" | awk -F: '/^fpr:/ { print $10; exit }')"
-          if [[ -z "$APT_GPG_KEY" ]]; then
-            echo "Unable to determine a signing key fingerprint from APT_GPG_PRIVATE_KEY." >&2
-            exit 1
-          fi
-
-          gpg --batch --import "$CLEAN_KEY_FILE"
-
+          APT_GPG_KEY="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/ { print $10; exit }')"
           if ! gpg --list-secret-keys --with-colons "$APT_GPG_KEY" | grep -q '^sec'; then
             echo "Expected GPG secret key $APT_GPG_KEY was not imported." >&2
             exit 1
