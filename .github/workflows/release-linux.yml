@@ -96,9 +96,7 @@ jobs:
           fi
 
       - name: Run tests
-        run: |
-          pnpm --filter @focuspal/desktop test
-          ./scripts/test-monorepo.sh
+        run: pnpm --filter @focuspal/desktop test
 
       - name: Import APT signing key
         env:

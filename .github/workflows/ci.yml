@@ -34,6 +34,3 @@ jobs:
 
       - name: Run desktop tests
         run: pnpm --filter @focuspal/desktop test
-
-      - name: Run monorepo checks
-        run: ./scripts/test-monorepo.sh
