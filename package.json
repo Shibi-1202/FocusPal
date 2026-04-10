@@ -1,6 +1,6 @@
 {
   "name": "focuspal-monorepo",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "private": true,
   "description": "FocusPal - A smart floating productivity companion",
   "workspaces": [
