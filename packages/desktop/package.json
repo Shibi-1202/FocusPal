@@ -4,8 +4,8 @@
   "description": "FocusPal Desktop App - Your personal productivity companion",
   "main": "src/main/main.js",
   "author": {
-    "name": "Shibi Chakaravarthy H",
-    "email": "shibih.works@gmail.com"
+    "name": "FocusPal Team",
+    "email": "support@focuspal.com"
   },
   "homepage": "https://focuspal.com",
   "license": "MIT",
