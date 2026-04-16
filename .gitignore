@@ -51,4 +51,6 @@ coverage/
 *.md
 **/*.md
 !/README.md
-/docs
+!/docs/
+!/docs/*.png
+!/docs/project-report.md
