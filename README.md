@@ -93,6 +93,17 @@ The settings window is where scheduling, behavior, notifications, and account ma
   </tr>
 </table>
 
+## Download the App Using 
+
+```bash
+curl -fsSL https://focuspaldownload.app/focuspal.asc | sudo gpg --dearmor -o /usr/share/keyrings/focuspal.gpg
+
+echo "deb [signed-by=/usr/share/keyrings/focuspal.gpg] https://focuspaldownload.app/apt stable main" | sudo tee /etc/apt/sources.list.d/focuspal.list
+
+sudo apt update 
+sudo apt install focuspal
+```
+
 ## Core Product Flow
 
 FocusPal is designed for a daily loop instead of a one-time checklist:
